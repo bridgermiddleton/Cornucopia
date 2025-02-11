@@ -1,4 +1,4 @@
-import { Text, View, StyleSheet, KeyboardAvoidingView, TextInput, Button, ActivityIndicator} from "react-native";
+import { Image, View, StyleSheet, KeyboardAvoidingView, TextInput, Button, ActivityIndicator} from "react-native";
 import React, {useState} from "react";
 import auth from '@react-native-firebase/auth';
 export default function Index() {
@@ -30,8 +30,15 @@ export default function Index() {
     }
   };
   return (
+  <View style={styles.screenContainer}>
+    <View style={styles.logoRow}>
+      <Image
+        source={require('../assets/images/cornucopia_logo.png')} // Or use a remote URI: { uri: 'https://example.com/logo.png' }
+        style={styles.logo}
+      />
+    </View>
     <View
-      style={styles.container}
+      style={styles.loginContainer}
     >
       <KeyboardAvoidingView behavior="padding">
         <TextInput
@@ -68,13 +75,24 @@ export default function Index() {
       }
       </KeyboardAvoidingView>
     </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    marginHorizontal: 20,
+  screenContainer: {
     flex: 1,
+    backgroundColor: "#c9c0b7",
+  },
+  logoRow: {
+    flexDirection: 'row',       // positions items in a row
+    justifyContent: 'center',   // center horizontally
+    alignItems: 'center',       // center vertically (in row dimension)
+    paddingTop: 60,             // some space from top
+    paddingBottom: 60 
+  },
+  loginContainer: {
+    marginHorizontal: 20,
     justifyContent: "center",
   },
   input: {
@@ -83,7 +101,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     backgroundColor: "#fff",
     borderRadius: 4,
-  }
+  },
+  logo: {
+    width: 150,    // Adjust width
+    height: 150,   // Adjust height
+    marginBottom: 20,
+  },
 
 
 })
