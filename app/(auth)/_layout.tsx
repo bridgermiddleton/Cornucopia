@@ -22,7 +22,7 @@ export default function TabsLayout() {
   
         {/* Fridge Tab */}
         <Tabs.Screen
-          name="myfridge" // Matches fridge.tsx
+          name="fridge" // Matches fridge.tsx
           options={{
             title: 'My Fridge',
             tabBarIcon: ({ color, size }) => (
