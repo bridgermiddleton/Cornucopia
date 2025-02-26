@@ -64,10 +64,12 @@ export default function Index() {
             <Button
               title="Login"
               onPress={signIn}
+              color={'#43413e'}
             />
             <Button
               title="Create account"
               onPress={signUp}
+              color={'#43413e'}
             />
           </>
         )
@@ -96,11 +98,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   input: {
+    height: 40,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    paddingHorizontal: 10,
     marginVertical: 10,
-    padding: 10,
-    borderWidth: 1,
-    backgroundColor: "#fff",
-    borderRadius: 4,
+    fontSize: 16,
+    color: '#333',
+    // optional shadow on iOS:
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    // optional elevation on Android:
+    elevation: 2
   },
   logo: {
     width: 150,    // Adjust width
