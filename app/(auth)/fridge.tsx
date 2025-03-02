@@ -7,32 +7,51 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
-  Button
+  Button,
+  Alert,
+  Platform
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
+import DatePicker from 'react-native-date-picker'
 
 export default function FridgeScreen() {
 
   type FridgeItem = {
     id: string;
-    name?: string;
-    quantity?: string;
-    expiration?: string;
+    name: string;
+    quantity: string;
+    expiration: string;
     // ...any other fields you have
   };
   
   // State for the list of items
   const [fridgeItems, setFridgeItems] = useState<FridgeItem[]>([]);
 
+  const [expiration, setExpiration] = useState(new Date())
+  const [open, setOpen] = useState(false)
 
-  // Control the modal visibility
-  const [modalVisible, setModalVisible] = useState(false);
+  // Control the modals visibility
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Temporary states for user input in modal
+  // Temporary states for add modal
   const [itemName, setItemName] = useState('');
   const [itemQuantity, setItemQuantity] = useState('');
-  const [itemExpiration, setItemExpiration] = useState('');
+
+  // States for edit modal
+  const [editingItem, setEditingItem] = useState<FridgeItem | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editQuantity, setEditQuantity] = useState('');
+  const [editExpiration, setEditExpiration] = useState(new Date());
+  const [editDatePickerOpen, setEditDatePickerOpen] = useState(false);
+
+  // Format date for display
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString();
+  };
 
   // ----------- 1) Real-Time Subscription to Firestore ----------- //
   useEffect(() => {
@@ -54,8 +73,11 @@ export default function FridgeScreen() {
     const unsubscribe = fridgeCollection.onSnapshot(snapshot => {
       const items = snapshot.docs.map(doc => ({
         id: doc.id,
+        name: doc.data().name || '',
+        quantity: doc.data().quantity || '',
+        expiration: doc.data().expiration || new Date().toISOString(),
         ...doc.data()
-      }));
+      })) as FridgeItem[];
       setFridgeItems(items);
     });
 
@@ -63,8 +85,121 @@ export default function FridgeScreen() {
     return () => unsubscribe();
   }, []);
 
-  // ----------- 2) Add a New Item to Firestore ----------- //
+  // Reset all edit-related states
+  const resetEditStates = () => {
+    setEditModalVisible(false);
+    setShowDeleteConfirm(false);
+    setEditingItem(null);
+    setEditName('');
+    setEditQuantity('');
+    setEditExpiration(new Date());
+    setEditDatePickerOpen(false);
+  };
+
+  // Reset all add-related states
+  const resetAddStates = () => {
+    setAddModalVisible(false);
+    setItemName('');
+    setItemQuantity('');
+    setExpiration(new Date());
+    setOpen(false);
+  };
+
+  // ----------- Handle Item Deletion ----------- //
+  const handleDeleteItem = async () => {
+    console.log('handleDeleteItem called');
+    if (!editingItem) {
+      console.log('No item to delete');
+      return;
+    }
+
+    const user = auth().currentUser;
+    if (!user) {
+      console.log('No user logged in');
+      return;
+    }
+
+    try {
+      console.log('Attempting to delete item:', editingItem.id);
+      // First delete the item
+      await firestore()
+        .collection('users')
+        .doc(user.uid)
+        .collection('fridgeItems')
+        .doc(editingItem.id)
+        .delete();
+
+      console.log('Item deleted from Firestore!');
+      
+      // Then close both modals and reset states
+      setEditModalVisible(false);
+      resetEditStates();
+    } catch (err) {
+      console.log('Error deleting item:', err);
+      Alert.alert('Error', 'Failed to delete item. Please try again.');
+      // Only close edit modal on error, keep edit modal open
+      setEditModalVisible(false);
+    }
+  };
+
+  // ----------- Handle Item Update ----------- //
+  const handleUpdateItem = async () => {
+    // Validate required fields
+    if (!editName.trim()) {
+      Alert.alert('Required Field', 'Please enter a food name');
+      return;
+    }
+    if (!editQuantity.trim()) {
+      Alert.alert('Required Field', 'Please enter a quantity');
+      return;
+    }
+    if (!editExpiration) {
+      Alert.alert('Required Field', 'Please select an expiration date');
+      return;
+    }
+
+    if (!editingItem) return;
+
+    const user = auth().currentUser;
+    if (!user) return;
+
+    try {
+      await firestore()
+        .collection('users')
+        .doc(user.uid)
+        .collection('fridgeItems')
+        .doc(editingItem.id)
+        .update({
+          name: editName.trim(),
+          quantity: editQuantity.trim(),
+          expiration: editExpiration.toISOString(),
+        });
+
+      console.log('Item updated in Firestore!');
+      resetEditStates();
+    } catch (err) {
+      console.log('Error updating item:', err);
+      Alert.alert('Error', 'Failed to update item. Please try again.');
+      resetEditStates();
+    }
+  };
+
+  // ----------- Handle Add Item ----------- //
   const handleAddItem = async () => {
+    // Validate required fields
+    if (!itemName.trim()) {
+      Alert.alert('Required Field', 'Please enter a food name');
+      return;
+    }
+    if (!itemQuantity.trim()) {
+      Alert.alert('Required Field', 'Please enter a quantity');
+      return;
+    }
+    if (!expiration) {
+      Alert.alert('Required Field', 'Please select an expiration date');
+      return;
+    }
+
     const user = auth().currentUser;
     if (!user) return;
 
@@ -74,31 +209,48 @@ export default function FridgeScreen() {
         .doc(user.uid)
         .collection('fridgeItems')
         .add({
-          name: itemName,
-          quantity: itemQuantity,
-          expiration: itemExpiration,
+          name: itemName.trim(),
+          quantity: itemQuantity.trim(),
+          expiration: expiration.toISOString(),
           createdAt: firestore.FieldValue.serverTimestamp()
         });
 
       console.log('Item added to Firestore!');
+      resetAddStates();
     } catch (err) {
       console.log('Error adding item:', err);
+      Alert.alert('Error', 'Failed to add item. Please try again.');
+      resetAddStates();
     }
-
-    // Clear inputs & close modal
-    setItemName('');
-    setItemQuantity('');
-    setItemExpiration('');
-    setModalVisible(false);
   };
 
   // Renders each fridge item in a row
   const renderFridgeItem = ({ item }: { item: FridgeItem }) => {
     return (
       <View style={styles.itemRow}>
+        <TouchableOpacity 
+          style={styles.editButton}
+          onPress={() => {
+            // Reset edit states before setting new values
+            setEditingItem(null);
+            setEditName('');
+            setEditQuantity('');
+            setEditExpiration(new Date());
+            setEditDatePickerOpen(false);
+            
+            // Set new values
+            setEditingItem(item);
+            setEditName(item.name);
+            setEditQuantity(item.quantity);
+            setEditExpiration(new Date(item.expiration));
+            setEditModalVisible(true);
+          }}
+        >
+          <Text style={styles.editButtonText}>⋯</Text>
+        </TouchableOpacity>
         <Text style={styles.itemText}>{item.name}</Text>
         <Text style={styles.itemText}>Qty: {item.quantity}</Text>
-        <Text style={styles.itemText}>Expires: {item.expiration}</Text>
+        <Text style={styles.itemText}>Expires: {formatDate(item.expiration)}</Text>
       </View>
     );
   };
@@ -119,48 +271,165 @@ export default function FridgeScreen() {
         />
       )}
 
-      {/* Plus button to open the "toast-like" modal */}
+      {/* Plus button to open the add modal */}
       <TouchableOpacity
         style={styles.addButton}
-        onPress={() => setModalVisible(true)}
+        onPress={() => {
+          resetAddStates();
+          setAddModalVisible(true);
+        }}
       >
         <Text style={styles.addButtonText}>+</Text>
       </TouchableOpacity>
 
-      {/* The "Modal" for adding a new item */}
+      {/* The Modal for adding a new item */}
       <Modal
         transparent={true}
         animationType="slide"
-        visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        visible={addModalVisible}
+        onRequestClose={() => resetAddStates()}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>Add an Item</Text>
 
             <TextInput
-              placeholder="Food name"
+              placeholder="Food Name"
               value={itemName}
               onChangeText={setItemName}
               style={styles.input}
+              autoCapitalize='words'
+              autoCorrect={true}
             />
             <TextInput
               placeholder="Quantity"
               value={itemQuantity}
-              onChangeText={setItemQuantity}
+              onChangeText={(text) => setItemQuantity(text.replace(/[^0-9]/g, ''))}
               style={styles.input}
+              keyboardType="numeric"
             />
-            <TextInput
-              placeholder="Expiration date"
-              value={itemExpiration}
-              onChangeText={setItemExpiration}
-              style={styles.input}
+            <View style={styles.dateContainer}>
+              <Button title="Select Expiration Date" onPress={() => setOpen(true)} />
+              <Text style={styles.selectedDate}>
+                Selected: {formatDate(expiration.toISOString())}
+              </Text>
+            </View>
+            <DatePicker
+              modal
+              open={open}
+              mode='date'
+              date={expiration}
+              minimumDate={new Date()}
+              onConfirm={(date) => {
+                setOpen(false)
+                setExpiration(date)
+              }}
+              onCancel={() => {
+                setOpen(false)
+              }}
             />
 
             <View style={styles.modalButtonRow}>
-              <Button title="Cancel" onPress={() => setModalVisible(false)} />
+              <Button title="Cancel" onPress={resetAddStates} />
               <Button title="Add Item" onPress={handleAddItem} />
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit Item Modal */}
+      <Modal
+        transparent={true}
+        animationType="slide"
+        visible={editModalVisible}
+        onRequestClose={resetEditStates}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>
+              {showDeleteConfirm ? 'Confirm Delete' : 'Edit Item'}
+            </Text>
+
+            {showDeleteConfirm ? (
+              <>
+                <Text style={styles.deleteModalText}>
+                  Are you sure you want to remove {editingItem?.name}?
+                </Text>
+                <View style={styles.editModalButtons}>
+                  <TouchableOpacity 
+                    style={[styles.editModalButton, styles.cancelButton]}
+                    onPress={() => setShowDeleteConfirm(false)}
+                  >
+                    <Text style={styles.editModalButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.editModalButton, styles.deleteButton]}
+                    onPress={handleDeleteItem}
+                  >
+                    <Text style={styles.editModalButtonText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <TextInput
+                  placeholder="Food Name"
+                  value={editName}
+                  onChangeText={setEditName}
+                  style={styles.input}
+                  autoCapitalize='words'
+                  autoCorrect={true}
+                />
+                <TextInput
+                  placeholder="Quantity"
+                  value={editQuantity}
+                  onChangeText={(text) => setEditQuantity(text.replace(/[^0-9]/g, ''))}
+                  style={styles.input}
+                  keyboardType="numeric"
+                />
+                <View style={styles.dateContainer}>
+                  <Button title="Select Expiration Date" onPress={() => setEditDatePickerOpen(true)} />
+                  <Text style={styles.selectedDate}>
+                    Selected: {formatDate(editExpiration.toISOString())}
+                  </Text>
+                </View>
+                <DatePicker
+                  modal
+                  open={editDatePickerOpen}
+                  mode='date'
+                  date={editExpiration}
+                  minimumDate={new Date()}
+                  onConfirm={(date) => {
+                    setEditDatePickerOpen(false);
+                    setEditExpiration(date);
+                  }}
+                  onCancel={() => {
+                    setEditDatePickerOpen(false);
+                  }}
+                />
+
+                <View style={styles.editModalButtons}>
+                  <TouchableOpacity 
+                    style={[styles.editModalButton, styles.cancelButton]}
+                    onPress={resetEditStates}
+                  >
+                    <Text style={styles.editModalButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.editModalButton, styles.deleteButton]}
+                    onPress={() => setShowDeleteConfirm(true)}
+                  >
+                    <Text style={styles.editModalButtonText}>Delete</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.editModalButton, styles.updateButton]}
+                    onPress={handleUpdateItem}
+                  >
+                    <Text style={styles.editModalButtonText}>Update</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -215,9 +484,10 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)', // darker overlay
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    zIndex: 998,
   },
   modalContainer: {
     width: '80%',
@@ -240,5 +510,65 @@ const styles = StyleSheet.create({
     marginTop: 12,
     flexDirection: 'row',
     justifyContent: 'space-between'
-  }
+  },
+  dateContainer: {
+    marginVertical: 10,
+  },
+  selectedDate: {
+    marginTop: 8,
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+  },
+  editButton: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#3498db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
+  },
+  editButtonText: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    lineHeight: 24,
+    marginTop: -4, // Adjust the vertical position of the dots
+  },
+  editModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  editModalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginHorizontal: 4,
+  },
+  editModalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  updateButton: {
+    backgroundColor: '#27ae60',
+  },
+  deleteButton: {
+    backgroundColor: '#e74c3c',
+  },
+  cancelButton: {
+    backgroundColor: '#95a5a6',
+  },
+  deleteModalText: {
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+    marginVertical: 20,
+  },
 });
