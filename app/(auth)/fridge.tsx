@@ -663,7 +663,7 @@ export default function FridgeScreen() {
 const styles = StyleSheet.create({
   screenContainer: {
     flex: 1,
-    backgroundColor: '#faf8f4',
+    backgroundColor: '#c9c0b7',
     padding: 16
   },
   emptyText: {
@@ -898,10 +898,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 15,
-    backgroundColor: '#3498db',
+    backgroundColor: '#8C7B75',
   },
   accordionHeaderActive: {
-    backgroundColor: '#2980b9', // slightly darker blue when active
+    backgroundColor: '#8C7B75', // slightly darker blue when active
   },
   accordionTitle: {
     fontSize: 16,
