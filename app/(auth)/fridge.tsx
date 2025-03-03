@@ -9,22 +9,55 @@ import {
   TextInput,
   Button,
   Alert,
-  Platform
+  Platform,
+  Pressable,
+  ScrollView,
 } from 'react-native';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import DatePicker from 'react-native-date-picker'
+import { Picker } from '@react-native-picker/picker';
+
+// Define FridgeItem interface
+interface FridgeItem {
+  id: string;
+  name: string;
+  quantity: string;
+  expiration: string;
+  category: string;
+}
+
+// Define interface for AccordionSection props
+interface AccordionSectionProps {
+  category: string;
+  items: FridgeItem[];
+  isOpen: boolean;
+  onToggle: () => void;
+}
+
+// Define interface for grouped items
+interface GroupedItems {
+  [key: string]: FridgeItem[];
+}
 
 export default function FridgeScreen() {
+  // Define food categories
+  const FOOD_CATEGORIES = [
+    { label: 'Select a category...', value: '' },
+    { label: 'Fruits & Vegetables', value: 'produce' },
+    { label: 'Meat', value: 'meat' },
+    { label: 'Seafood', value: 'seafood' },
+    { label: 'Dairy & Eggs', value: 'dairy' },
+    { label: 'Beverages', value: 'beverages' },
+    { label: 'Condiments & Sauces', value: 'condiments' },
+    { label: 'Spices & Seasonings', value: 'spices' },
+    { label: 'Grains & Pasta', value: 'grains' },
+    { label: 'Snacks', value: 'snacks' },
+    { label: 'Leftovers', value: 'leftovers' },
+    { label: 'Ready Meals', value: 'ready_meals' },
+    { label: 'Other', value: 'other' }
+  ];
 
-  type FridgeItem = {
-    id: string;
-    name: string;
-    quantity: string;
-    expiration: string;
-    // ...any other fields you have
-  };
-  
   // State for the list of items
   const [fridgeItems, setFridgeItems] = useState<FridgeItem[]>([]);
 
@@ -39,13 +72,22 @@ export default function FridgeScreen() {
   // Temporary states for add modal
   const [itemName, setItemName] = useState('');
   const [itemQuantity, setItemQuantity] = useState('');
+  const [itemCategory, setItemCategory] = useState('');
 
   // States for edit modal
   const [editingItem, setEditingItem] = useState<FridgeItem | null>(null);
   const [editName, setEditName] = useState('');
   const [editQuantity, setEditQuantity] = useState('');
+  const [editCategory, setEditCategory] = useState('');
   const [editExpiration, setEditExpiration] = useState(new Date());
   const [editDatePickerOpen, setEditDatePickerOpen] = useState(false);
+
+  // Add new state for category picker visibility
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [showEditCategoryPicker, setShowEditCategoryPicker] = useState(false);
+
+  // Change Set to array for open categories
+  const [openCategories, setOpenCategories] = useState<string[]>([]);
 
   // Format date for display
   const formatDate = (dateString: string) => {
@@ -76,6 +118,7 @@ export default function FridgeScreen() {
         name: doc.data().name || '',
         quantity: doc.data().quantity || '',
         expiration: doc.data().expiration || new Date().toISOString(),
+        category: doc.data().category || '',
         ...doc.data()
       })) as FridgeItem[];
       setFridgeItems(items);
@@ -92,8 +135,10 @@ export default function FridgeScreen() {
     setEditingItem(null);
     setEditName('');
     setEditQuantity('');
+    setEditCategory('');
     setEditExpiration(new Date());
     setEditDatePickerOpen(false);
+    setShowEditCategoryPicker(false);
   };
 
   // Reset all add-related states
@@ -101,8 +146,10 @@ export default function FridgeScreen() {
     setAddModalVisible(false);
     setItemName('');
     setItemQuantity('');
+    setItemCategory('');
     setExpiration(new Date());
     setOpen(false);
+    setShowCategoryPicker(false);
   };
 
   // ----------- Handle Item Deletion ----------- //
@@ -153,6 +200,10 @@ export default function FridgeScreen() {
       Alert.alert('Required Field', 'Please enter a quantity');
       return;
     }
+    if (!editCategory) {
+      Alert.alert('Required Field', 'Please select a category');
+      return;
+    }
     if (!editExpiration) {
       Alert.alert('Required Field', 'Please select an expiration date');
       return;
@@ -172,6 +223,7 @@ export default function FridgeScreen() {
         .update({
           name: editName.trim(),
           quantity: editQuantity.trim(),
+          category: editCategory,
           expiration: editExpiration.toISOString(),
         });
 
@@ -195,6 +247,10 @@ export default function FridgeScreen() {
       Alert.alert('Required Field', 'Please enter a quantity');
       return;
     }
+    if (!itemCategory) {
+      Alert.alert('Required Field', 'Please select a category');
+      return;
+    }
     if (!expiration) {
       Alert.alert('Required Field', 'Please select an expiration date');
       return;
@@ -211,6 +267,7 @@ export default function FridgeScreen() {
         .add({
           name: itemName.trim(),
           quantity: itemQuantity.trim(),
+          category: itemCategory,
           expiration: expiration.toISOString(),
           createdAt: firestore.FieldValue.serverTimestamp()
         });
@@ -224,33 +281,76 @@ export default function FridgeScreen() {
     }
   };
 
-  // Renders each fridge item in a row
-  const renderFridgeItem = ({ item }: { item: FridgeItem }) => {
+  // Update toggle function to use array instead of Set
+  const toggleCategory = (category: string) => {
+    setOpenCategories(prev => {
+      if (prev.includes(category)) {
+        return prev.filter(cat => cat !== category);
+      } else {
+        return [...prev, category];
+      }
+    });
+  };
+
+  // Group items by category
+  const groupedItems: GroupedItems = fridgeItems.reduce((acc: GroupedItems, item) => {
+    if (!acc[item.category]) {
+      acc[item.category] = [];
+    }
+    acc[item.category].push(item);
+    return acc;
+  }, {});
+
+  // AccordionSection component
+  const AccordionSection: React.FC<AccordionSectionProps> = ({ category, items, isOpen, onToggle }) => {
     return (
-      <View style={styles.itemRow}>
+      <View style={styles.accordionContainer}>
         <TouchableOpacity 
-          style={styles.editButton}
-          onPress={() => {
-            // Reset edit states before setting new values
-            setEditingItem(null);
-            setEditName('');
-            setEditQuantity('');
-            setEditExpiration(new Date());
-            setEditDatePickerOpen(false);
-            
-            // Set new values
-            setEditingItem(item);
-            setEditName(item.name);
-            setEditQuantity(item.quantity);
-            setEditExpiration(new Date(item.expiration));
-            setEditModalVisible(true);
-          }}
+          style={[
+            styles.accordionHeader,
+            isOpen && styles.accordionHeaderActive
+          ]} 
+          onPress={onToggle}
+          activeOpacity={0.7}
         >
-          <Text style={styles.editButtonText}>⋯</Text>
+          <Text style={styles.accordionTitle}>
+            {FOOD_CATEGORIES.find(cat => cat.value === category)?.label || category}
+          </Text>
+          <Text style={styles.accordionIcon}>{isOpen ? '▼' : '▶'}</Text>
         </TouchableOpacity>
-        <Text style={styles.itemText}>{item.name}</Text>
-        <Text style={styles.itemText}>Qty: {item.quantity}</Text>
-        <Text style={styles.itemText}>Expires: {formatDate(item.expiration)}</Text>
+        {isOpen && (
+          <View style={styles.accordionContent}>
+            {items.map((item) => (
+              <View key={item.id} style={styles.itemRow}>
+                <TouchableOpacity 
+                  style={styles.editButton}
+                  onPress={() => {
+                    // Reset edit states before setting new values
+                    setEditingItem(null);
+                    setEditName('');
+                    setEditQuantity('');
+                    setEditCategory('');
+                    setEditExpiration(new Date());
+                    setEditDatePickerOpen(false);
+                    
+                    // Set new values
+                    setEditingItem(item);
+                    setEditName(item.name);
+                    setEditQuantity(item.quantity);
+                    setEditCategory(item.category);
+                    setEditExpiration(new Date(item.expiration));
+                    setEditModalVisible(true);
+                  }}
+                >
+                  <Text style={styles.editButtonText}>⋯</Text>
+                </TouchableOpacity>
+                <Text style={styles.itemText}>{item.name}</Text>
+                <Text style={styles.itemText}>Qty: {item.quantity}</Text>
+                <Text style={styles.itemText}>Expires: {formatDate(item.expiration)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     );
   };
@@ -263,12 +363,17 @@ export default function FridgeScreen() {
           Your fridge is currently empty. Add some items!
         </Text>
       ) : (
-        <FlatList
-          data={fridgeItems}
-          keyExtractor={(item) => item.id}
-          renderItem={renderFridgeItem}
-          contentContainerStyle={{ paddingVertical: 20 }}
-        />
+        <ScrollView style={styles.accordionList}>
+          {Object.entries(groupedItems).map(([category, items]) => (
+            <AccordionSection
+              key={category}
+              category={category}
+              items={items}
+              isOpen={openCategories.includes(category)}
+              onToggle={() => toggleCategory(category)}
+            />
+          ))}
+        </ScrollView>
       )}
 
       {/* Plus button to open the add modal */}
@@ -308,6 +413,20 @@ export default function FridgeScreen() {
               style={styles.input}
               keyboardType="numeric"
             />
+            <Pressable
+              style={({ pressed }) => [
+                styles.categoryButton,
+                pressed && styles.categoryButtonPressed
+              ]}
+              onPress={() => setShowCategoryPicker(true)}
+            >
+              <View style={styles.categoryButtonContent}>
+                <Text style={styles.categoryButtonText}>
+                  {itemCategory ? FOOD_CATEGORIES.find(cat => cat.value === itemCategory)?.label : 'Select a category...'}
+                </Text>
+                <Text style={styles.categoryButtonIcon}>▼</Text>
+              </View>
+            </Pressable>
             <View style={styles.dateContainer}>
               <Button title="Select Expiration Date" onPress={() => setOpen(true)} />
               <Text style={styles.selectedDate}>
@@ -328,6 +447,50 @@ export default function FridgeScreen() {
                 setOpen(false)
               }}
             />
+
+            <Modal
+              transparent={true}
+              visible={showCategoryPicker}
+              animationType="slide"
+              onRequestClose={() => setShowCategoryPicker(false)}
+            >
+              <View style={styles.modalOverlay}>
+                <View style={styles.pickerModalContainer}>
+                  <Text style={styles.modalTitle}>Select Category</Text>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={itemCategory}
+                      onValueChange={(value: string) => {
+                        setItemCategory(value);
+                      }}
+                      style={styles.picker}
+                    >
+                      {FOOD_CATEGORIES.map((category) => (
+                        <Picker.Item
+                          key={category.value}
+                          label={category.label}
+                          value={category.value}
+                        />
+                      ))}
+                    </Picker>
+                  </View>
+                  <View style={styles.pickerButtonRow}>
+                    <TouchableOpacity
+                      style={[styles.pickerButton, styles.cancelButton]}
+                      onPress={() => setShowCategoryPicker(false)}
+                    >
+                      <Text style={styles.pickerButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.pickerButton, styles.confirmButton]}
+                      onPress={() => setShowCategoryPicker(false)}
+                    >
+                      <Text style={styles.pickerButtonText}>Confirm</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </Modal>
 
             <View style={styles.modalButtonRow}>
               <Button title="Cancel" onPress={resetAddStates} />
@@ -387,6 +550,20 @@ export default function FridgeScreen() {
                   style={styles.input}
                   keyboardType="numeric"
                 />
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.categoryButton,
+                    pressed && styles.categoryButtonPressed
+                  ]}
+                  onPress={() => setShowEditCategoryPicker(true)}
+                >
+                  <View style={styles.categoryButtonContent}>
+                    <Text style={styles.categoryButtonText}>
+                      {editCategory ? FOOD_CATEGORIES.find(cat => cat.value === editCategory)?.label : 'Select a category...'}
+                    </Text>
+                    <Text style={styles.categoryButtonIcon}>▼</Text>
+                  </View>
+                </Pressable>
                 <View style={styles.dateContainer}>
                   <Button title="Select Expiration Date" onPress={() => setEditDatePickerOpen(true)} />
                   <Text style={styles.selectedDate}>
@@ -407,6 +584,50 @@ export default function FridgeScreen() {
                     setEditDatePickerOpen(false);
                   }}
                 />
+
+                <Modal
+                  transparent={true}
+                  visible={showEditCategoryPicker}
+                  animationType="slide"
+                  onRequestClose={() => setShowEditCategoryPicker(false)}
+                >
+                  <View style={styles.modalOverlay}>
+                    <View style={styles.pickerModalContainer}>
+                      <Text style={styles.modalTitle}>Select Category</Text>
+                      <View style={styles.pickerContainer}>
+                        <Picker
+                          selectedValue={editCategory}
+                          onValueChange={(value: string) => {
+                            setEditCategory(value);
+                          }}
+                          style={styles.picker}
+                        >
+                          {FOOD_CATEGORIES.map((category) => (
+                            <Picker.Item
+                              key={category.value}
+                              label={category.label}
+                              value={category.value}
+                            />
+                          ))}
+                        </Picker>
+                      </View>
+                      <View style={styles.pickerButtonRow}>
+                        <TouchableOpacity
+                          style={[styles.pickerButton, styles.cancelButton]}
+                          onPress={() => setShowEditCategoryPicker(false)}
+                        >
+                          <Text style={styles.pickerButtonText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.pickerButton, styles.confirmButton]}
+                          onPress={() => setShowEditCategoryPicker(false)}
+                        >
+                          <Text style={styles.pickerButtonText}>Confirm</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                </Modal>
 
                 <View style={styles.editModalButtons}>
                   <TouchableOpacity 
@@ -570,5 +791,128 @@ const styles = StyleSheet.create({
     color: '#333',
     textAlign: 'center',
     marginVertical: 20,
+  },
+  categoryButton: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#ddd',
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 8,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 1,
+  },
+  categoryButtonPressed: {
+    backgroundColor: '#f7f7f7',
+    borderColor: '#ccc',
+  },
+  categoryButtonContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  categoryButtonText: {
+    color: '#333',
+    fontSize: 16,
+    flex: 1,
+  },
+  categoryButtonIcon: {
+    color: '#666',
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  pickerModalContainer: {
+    backgroundColor: '#fff',
+    width: '90%',
+    borderRadius: 12,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  pickerContainer: {
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+    marginVertical: 8,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        height: 200,
+      },
+      android: {
+        height: 50,
+      },
+    }),
+  },
+  picker: {
+    width: '100%',
+    height: '100%',
+  },
+  itemCategory: {
+    fontSize: 14,
+    color: '#666',
+    marginVertical: 4
+  },
+  pickerButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    gap: 10,
+  },
+  pickerButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  pickerButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  confirmButton: {
+    backgroundColor: '#3498db',
+  },
+  accordionList: {
+    flex: 1,
+    paddingVertical: 20,
+  },
+  accordionContainer: {
+    marginBottom: 10,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    overflow: 'hidden',
+    // Shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  accordionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+    backgroundColor: '#3498db',
+  },
+  accordionHeaderActive: {
+    backgroundColor: '#2980b9', // slightly darker blue when active
+  },
+  accordionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  accordionIcon: {
+    fontSize: 14,
+    color: '#fff',
+  },
+  accordionContent: {
+    padding: 10,
   },
 });
