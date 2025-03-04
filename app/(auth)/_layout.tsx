@@ -63,6 +63,17 @@ export default function TabsLayout() {
             ),
           }}
         />
+         {/* Profile Tab */}
+        <Tabs.Screen
+          name="profile" // Matches recipes.tsx
+          options={{
+            title: 'Profile',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="person" color={color} size={size} />
+            ),
+          }}
+        />
       </Tabs>
+      
     );
   }
