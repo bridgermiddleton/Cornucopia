@@ -38,12 +38,13 @@ export default function Index() {
       <View style={styles.contentContainer}>
         {/* Logo Section */}
         <View style={styles.logoSection}>
-          <Image
-            source={require('../assets/images/cornucopia_logo.png')}
-            style={styles.logo}
-          />
-          <Text style={styles.appName}>Cornucopia</Text>
-          <Text style={styles.tagline}>Smart Grocery Planning</Text>
+          <View style={styles.logoContainer}>
+            <Image
+              source={require('../assets/images/co.png')}
+              style={styles.logo}
+            />
+            <View style={styles.logoShadow} />
+          </View>
         </View>
 
         {/* Login Form Section */}
@@ -114,21 +115,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 40,
   },
+  logoContainer: {
+    position: 'relative',
+    marginBottom: 24,
+  },
   logo: {
-    width: 120,
-    height: 120,
-    marginBottom: 16,
+    width: 160,
+    height: 160,
+    resizeMode: 'contain',
+  },
+  logoShadow: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 80,
+    transform: [{ scale: 1.1 }],
+    zIndex: -1,
   },
   appName: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: 'bold',
     color: '#333',
     marginBottom: 8,
+    letterSpacing: 0.5,
   },
   tagline: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#666',
     textAlign: 'center',
+    letterSpacing: 0.3,
   },
   formSection: {
     backgroundColor: '#FFFFFF',
