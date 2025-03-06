@@ -44,9 +44,9 @@ export default function TabsLayout() {
   
         {/* Grocery Stores Tab */}
         <Tabs.Screen
-          name="grocerystores" // Matches grocerystores.tsx
+          name="grocery-settings" // Matches grocerystores.tsx
           options={{
-            title: 'Stores',
+            title: 'Grocery Stores',
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="storefront" color={color} size={size} />
             ),

@@ -17,6 +17,8 @@ import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import DatePicker from 'react-native-date-picker'
 import { Picker } from '@react-native-picker/picker';
+import { Ionicons } from '@expo/vector-icons';
+import { Stack } from 'expo-router';
 
 // Define FridgeItem interface
 interface FridgeItem {
@@ -357,11 +359,23 @@ export default function FridgeScreen() {
 
   return (
     <View style={styles.screenContainer}>
+      <Stack.Screen 
+        options={{
+          title: 'My Fridge',
+          headerStyle: {
+            backgroundColor: '#FFFFFF',
+          },
+          headerTintColor: '#333',
+        }} 
+      />
+      
       {/* If no items, show a helpful message */}
       {fridgeItems.length === 0 ? (
-        <Text style={styles.emptyText}>
-          Your fridge is currently empty. Add some items!
-        </Text>
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>
+            Your fridge is currently empty. Add some items!
+          </Text>
+        </View>
       ) : (
         <ScrollView style={styles.accordionList}>
           {Object.entries(groupedItems).map(([category, items]) => (
@@ -384,7 +398,7 @@ export default function FridgeScreen() {
           setAddModalVisible(true);
         }}
       >
-        <Text style={styles.addButtonText}>+</Text>
+        <Ionicons name="add" size={32} color="#FFFFFF" />
       </TouchableOpacity>
 
       {/* The Modal for adding a new item */}
@@ -663,154 +677,168 @@ export default function FridgeScreen() {
 const styles = StyleSheet.create({
   screenContainer: {
     flex: 1,
-    backgroundColor: '#c9c0b7',
+    backgroundColor: '#F5F5F5',
     padding: 16
   },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
   emptyText: {
-    marginTop: 50,
     fontSize: 18,
     textAlign: 'center',
-    color: '#333'
+    color: '#666',
+    lineHeight: 24,
   },
   itemRow: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     marginVertical: 8,
-    padding: 12,
-    borderRadius: 8,
-    // optional shadow on iOS
+    padding: 16,
+    borderRadius: 12,
     shadowColor: '#000',
-    shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 2 // shadow on Android
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   itemText: {
     fontSize: 16,
-    color: '#333'
+    color: '#333',
+    marginBottom: 4,
   },
   addButton: {
     position: 'absolute',
     right: 20,
     bottom: 40,
-    backgroundColor: '#3498db',
+    backgroundColor: '#4A90E2',
     width: 60,
     height: 60,
     borderRadius: 30,
     alignItems: 'center',
-    justifyContent: 'center'
-  },
-  addButtonText: {
-    fontSize: 30,
-    color: '#fff',
-    lineHeight: 35
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 998,
   },
   modalContainer: {
-    width: '80%',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 20
+    width: '90%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 10
+    color: '#333',
+    marginBottom: 20,
   },
   input: {
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#F5F5F5',
     marginVertical: 8,
-    borderRadius: 8,
-    padding: 10
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: '#333',
   },
   modalButtonRow: {
-    marginTop: 12,
+    marginTop: 20,
     flexDirection: 'row',
-    justifyContent: 'space-between'
+    justifyContent: 'space-between',
+    gap: 10,
   },
   dateContainer: {
-    marginVertical: 10,
+    marginVertical: 16,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 16,
   },
   selectedDate: {
     marginTop: 8,
     fontSize: 16,
-    color: '#333',
+    color: '#666',
     textAlign: 'center',
   },
   editButton: {
     position: 'absolute',
-    right: 8,
-    top: 8,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#3498db',
+    right: 12,
+    top: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#4A90E2',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1,
   },
   editButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 24,
     fontWeight: 'bold',
-    lineHeight: 24,
-    marginTop: -4, // Adjust the vertical position of the dots
   },
   editModalButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 20,
+    marginTop: 24,
+    gap: 10,
   },
   editModalButton: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 8,
-    marginHorizontal: 4,
+    borderRadius: 12,
+    alignItems: 'center',
   },
   editModalButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-    textAlign: 'center',
   },
   updateButton: {
-    backgroundColor: '#27ae60',
+    backgroundColor: '#4CAF50',
   },
   deleteButton: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: '#FF6B6B',
   },
   cancelButton: {
-    backgroundColor: '#95a5a6',
+    backgroundColor: '#95A5A6',
   },
   deleteModalText: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#333',
     textAlign: 'center',
-    marginVertical: 20,
+    marginVertical: 24,
+    lineHeight: 24,
   },
   categoryButton: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#ddd',
-    padding: 12,
-    borderRadius: 8,
+    borderColor: '#E0E0E0',
+    padding: 16,
+    borderRadius: 12,
     marginVertical: 8,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   categoryButtonPressed: {
-    backgroundColor: '#f7f7f7',
-    borderColor: '#ccc',
+    backgroundColor: '#F5F5F5',
+    borderColor: '#CCCCCC',
   },
   categoryButtonContent: {
     flexDirection: 'row',
@@ -824,20 +852,25 @@ const styles = StyleSheet.create({
   },
   categoryButtonIcon: {
     color: '#666',
-    fontSize: 14,
+    fontSize: 16,
     marginLeft: 8,
   },
   pickerModalContainer: {
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     width: '90%',
-    borderRadius: 12,
-    padding: 20,
+    borderRadius: 16,
+    padding: 24,
     maxHeight: '80%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   pickerContainer: {
-    backgroundColor: '#f0f0f0',
-    borderRadius: 8,
-    marginVertical: 8,
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    marginVertical: 16,
     overflow: 'hidden',
     ...Platform.select({
       ios: {
@@ -852,67 +885,61 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  itemCategory: {
-    fontSize: 14,
-    color: '#666',
-    marginVertical: 4
-  },
   pickerButtonRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 20,
+    marginTop: 24,
     gap: 10,
   },
   pickerButton: {
     flex: 1,
     paddingVertical: 12,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
   },
   pickerButtonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
   confirmButton: {
-    backgroundColor: '#3498db',
+    backgroundColor: '#4A90E2',
   },
   accordionList: {
     flex: 1,
     paddingVertical: 20,
   },
   accordionContainer: {
-    marginBottom: 10,
-    backgroundColor: '#fff',
-    borderRadius: 8,
+    marginBottom: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
     overflow: 'hidden',
-    // Shadow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   accordionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
-    backgroundColor: '#8C7B75',
+    padding: 16,
+    backgroundColor: '#4A90E2',
   },
   accordionHeaderActive: {
-    backgroundColor: '#8C7B75', // slightly darker blue when active
+    backgroundColor: '#357ABD',
   },
   accordionTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#FFFFFF',
   },
   accordionIcon: {
-    fontSize: 14,
-    color: '#fff',
+    fontSize: 16,
+    color: '#FFFFFF',
   },
   accordionContent: {
-    padding: 10,
+    padding: 16,
   },
 });

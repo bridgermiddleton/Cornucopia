@@ -2644,6 +2644,27 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - react-native-geolocation (3.4.0):
+    - DoubleConversion
+    - glog
+    - hermes-engine
+    - RCT-Folly (= 2024.01.01.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - Yoga
   - react-native-image-picker (8.2.0):
     - DoubleConversion
     - glog
@@ -3062,14 +3083,14 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
-  - RNFBApp (21.11.0):
+  - RNFBApp (21.12.0):
     - Firebase/CoreOnly (= 11.8.0)
     - React-Core
-  - RNFBAuth (21.11.0):
+  - RNFBAuth (21.12.0):
     - Firebase/Auth (= 11.8.0)
     - React-Core
     - RNFBApp
-  - RNFBFirestore (21.11.0):
+  - RNFBFirestore (21.12.0):
     - Firebase/Firestore (= 11.8.0)
     - React-Core
     - RNFBApp
@@ -3078,6 +3099,27 @@ PODS:
     - React-Core
     - RNFBApp
   - RNGestureHandler (2.20.2):
+    - DoubleConversion
+    - glog
+    - hermes-engine
+    - RCT-Folly (= 2024.01.01.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - Yoga
+  - RNPermissions (3.10.1):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -3288,6 +3330,7 @@ DEPENDENCIES:
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
   - react-native-date-picker (from `../node_modules/react-native-date-picker`)
+  - "react-native-geolocation (from `../node_modules/@react-native-community/geolocation`)"
   - react-native-image-picker (from `../node_modules/react-native-image-picker`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
   - react-native-webview (from `../node_modules/react-native-webview`)
@@ -3325,6 +3368,7 @@ DEPENDENCIES:
   - "RNFBFirestore (from `../node_modules/@react-native-firebase/firestore`)"
   - "RNFBStorage (from `../node_modules/@react-native-firebase/storage`)"
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
+  - RNPermissions (from `../node_modules/react-native-permissions`)
   - RNReanimated (from `../node_modules/react-native-reanimated`)
   - RNScreens (from `../node_modules/react-native-screens`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
@@ -3459,6 +3503,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
   react-native-date-picker:
     :path: "../node_modules/react-native-date-picker"
+  react-native-geolocation:
+    :path: "../node_modules/@react-native-community/geolocation"
   react-native-image-picker:
     :path: "../node_modules/react-native-image-picker"
   react-native-safe-area-context:
@@ -3533,6 +3579,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@react-native-firebase/storage"
   RNGestureHandler:
     :path: "../node_modules/react-native-gesture-handler"
+  RNPermissions:
+    :path: "../node_modules/react-native-permissions"
   RNReanimated:
     :path: "../node_modules/react-native-reanimated"
   RNScreens:
@@ -3612,6 +3660,7 @@ SPEC CHECKSUMS:
   React-Mapbuffer: bfec84fd4dc022fcd29656030d0ddba0092376bd
   React-microtasksnativemodule: d58c4937901e99ed1a4888bb95ad4cded4a7180a
   react-native-date-picker: 7e678233a126da0e2521fd024f88cd7f00f29af4
+  react-native-geolocation: 19e121dda71716926a4558790f69344951f2a3ce
   react-native-image-picker: 379ae0fbe413c643132eaaf89d46e71b6a6077e3
   react-native-safe-area-context: db6ad47f9354809886d34e349a0809b0580712ea
   react-native-webview: 7ca4d79f6a79f011a85417ee0957bf5bbbe0889b
@@ -3645,11 +3694,12 @@ SPEC CHECKSUMS:
   RecaptchaInterop: 7d1a4a01a6b2cb1610a47ef3f85f0c411434cb21
   RNCPicker: 1a44b9398c53f672d80773df7cc54f2126bbe35a
   RNDateTimePicker: 44bbbdd386116376ffd30d14ff9d20df9a3cb537
-  RNFBApp: fd5bf956d6114cd3172680ab9c2185143faaa385
-  RNFBAuth: e5bde6b5e34f51c8135de6c9f89d59af88677729
-  RNFBFirestore: 887c90528c12a992ae8d88b50ed58825a837ded5
+  RNFBApp: 5e27e8311042d41fa8350f1751ab42e042c39d52
+  RNFBAuth: 256f82d02f2274d73cf86ea52abb9dc1fa61ef59
+  RNFBFirestore: 2d0ac198f3f3d23861d6db818e16e5eaf9ca0ae9
   RNFBStorage: d3418108cb584b92ad33d2da5caadc733bc6ffdc
   RNGestureHandler: 1e33ee267aaf61bbab6089d32df3b38c3024e3dd
+  RNPermissions: 07a2d1620f21876bd553308cf6c384ed02c1b78b
   RNReanimated: 23d4dd74e67d9eb5648839dcaabc00be8aba6af4
   RNScreens: f5762e2dd74e365dcee2007dc96942a528ac25d4
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
