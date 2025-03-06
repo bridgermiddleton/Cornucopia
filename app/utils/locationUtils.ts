@@ -1,29 +1,30 @@
 import { Platform } from 'react-native';
-import { check, request, PERMISSIONS, RESULTS, Permission } from 'react-native-permissions';
+import { check, request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 import Geolocation from '@react-native-community/geolocation';
 
-export type LocationPermissionStatus = 'granted' | 'denied' | 'blocked' | 'unavailable';
-
-export interface Location {
-  latitude: number;
-  longitude: number;
-}
+export type LocationPermissionStatus = 'unavailable' | 'denied' | 'limited' | 'granted';
+export type Location = { latitude: number; longitude: number };
 
 export const checkLocationPermission = async (): Promise<LocationPermissionStatus> => {
-  const permission = Platform.select({
-    ios: PERMISSIONS.IOS.LOCATION_WHEN_IN_USE,
-    android: PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION,
-  }) as Permission;
-
   try {
+    const permission = Platform.select({
+      ios: PERMISSIONS.IOS.LOCATION_WHEN_IN_USE,
+      android: PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION,
+    });
+
+    if (!permission) {
+      console.error('Platform not supported');
+      return 'unavailable';
+    }
+
     const result = await check(permission);
     switch (result) {
       case RESULTS.GRANTED:
         return 'granted';
       case RESULTS.DENIED:
         return 'denied';
-      case RESULTS.BLOCKED:
-        return 'blocked';
+      case RESULTS.LIMITED:
+        return 'limited';
       default:
         return 'unavailable';
     }
@@ -34,20 +35,25 @@ export const checkLocationPermission = async (): Promise<LocationPermissionStatu
 };
 
 export const requestLocationPermission = async (): Promise<LocationPermissionStatus> => {
-  const permission = Platform.select({
-    ios: PERMISSIONS.IOS.LOCATION_WHEN_IN_USE,
-    android: PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION,
-  }) as Permission;
-
   try {
+    const permission = Platform.select({
+      ios: PERMISSIONS.IOS.LOCATION_WHEN_IN_USE,
+      android: PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION,
+    });
+
+    if (!permission) {
+      console.error('Platform not supported');
+      return 'unavailable';
+    }
+
     const result = await request(permission);
     switch (result) {
       case RESULTS.GRANTED:
         return 'granted';
       case RESULTS.DENIED:
         return 'denied';
-      case RESULTS.BLOCKED:
-        return 'blocked';
+      case RESULTS.LIMITED:
+        return 'limited';
       default:
         return 'unavailable';
     }
@@ -67,6 +73,7 @@ export const getCurrentLocation = (): Promise<Location> => {
         });
       },
       (error) => {
+        console.error('Error getting current location:', error);
         reject(error);
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
