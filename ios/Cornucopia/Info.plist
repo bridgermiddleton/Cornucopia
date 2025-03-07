@@ -55,6 +55,11 @@
     <string>We need your location to find grocery stores near you and provide better recommendations</string>
     <key>NSLocationAlwaysUsageDescription</key>
     <string>We need your location to find grocery stores near you and provide better recommendations</string>
+    <key>NSLocationTemporaryUsageDescriptionDictionary</key>
+    <dict>
+      <key>FetchGroceryStores</key>
+      <string>We need your precise location to find grocery stores near you</string>
+    </dict>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>We need your location to find grocery stores near you</string>
     <key>NSUserActivityTypes</key>

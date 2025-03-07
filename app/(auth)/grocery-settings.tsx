@@ -14,13 +14,6 @@ import {
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 import {
-  checkLocationPermission,
-  requestLocationPermission,
-  getCurrentLocation,
-  LocationPermissionStatus,
-  Location,
-} from '../utils/locationUtils';
-import {
   searchPlaces,
   getNearbyGroceryStores,
   getPlaceDetails,
@@ -49,8 +42,7 @@ interface UserPreferences {
 }
 
 export default function GrocerySettingsScreen() {
-  const [loading, setLoading] = useState(true);
-  const [locationPermission, setLocationPermission] = useState<LocationPermissionStatus>('unavailable');
+  const [loading, setLoading] = useState(false);
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
   const [nearbyStores, setNearbyStores] = useState<GroceryStore[]>([]);
   const [searchInput, setSearchInput] = useState('');
@@ -60,14 +52,14 @@ export default function GrocerySettingsScreen() {
   // Update the debounced search to be more responsive
   const debouncedSearch = useCallback(
     debounce(async (text: string) => {
-      if (text.length >= 2) { // Reduced to 2 characters for better responsiveness
+      if (text.length >= 2) {
         const predictions = await searchPlaces(text);
         setPlacePredictions(predictions);
       } else {
         setPlacePredictions([]);
       }
       setSearching(false);
-    }, 200), // Reduced debounce time for better responsiveness
+    }, 200),
     []
   );
 
@@ -79,50 +71,8 @@ export default function GrocerySettingsScreen() {
   };
 
   useEffect(() => {
-    checkInitialPermission();
     loadUserPreferences();
   }, []);
-
-  const checkInitialPermission = async () => {
-    const status = await checkLocationPermission();
-    setLocationPermission(status);
-
-    if (status === 'granted') {
-      getCurrentLocationAndUpdate();
-    }
-    
-    setLoading(false);
-  };
-
-  const handleRequestPermission = async () => {
-    const status = await requestLocationPermission();
-    setLocationPermission(status);
-
-    if (status === 'granted') {
-      getCurrentLocationAndUpdate();
-    } else {
-      Alert.alert(
-        'Location Permission Required',
-        'Please enable location permissions in your device settings to use this feature.',
-        [{ text: 'OK' }]
-      );
-    }
-  };
-
-  const getCurrentLocationAndUpdate = async () => {
-    try {
-      const location = await getCurrentLocation();
-      await updateUserLocation(location.latitude, location.longitude);
-      fetchNearbyStores(location.latitude, location.longitude);
-    } catch (error) {
-      console.error('Error getting location:', error);
-      Alert.alert(
-        'Location Error',
-        'Unable to get your current location. Please search for your location manually.',
-        [{ text: 'OK' }]
-      );
-    }
-  };
 
   const loadUserPreferences = async () => {
     const currentUser = auth().currentUser;
@@ -143,24 +93,6 @@ export default function GrocerySettingsScreen() {
     }
   };
 
-  const updateUserLocation = async (latitude: number, longitude: number) => {
-    const currentUser = auth().currentUser;
-    if (!currentUser) return;
-
-    await firestore()
-      .collection('users')
-      .doc(currentUser.uid)
-      .set({
-        preferences: {
-          ...userPreferences,
-          location: {
-            ...userPreferences?.location,
-            coordinates: { latitude, longitude },
-          },
-        },
-      }, { merge: true });
-  };
-
   const handlePlaceSelection = async (prediction: PlacePrediction) => {
     setLoading(true);
     setPlacePredictions([]);
@@ -170,8 +102,8 @@ export default function GrocerySettingsScreen() {
     try {
       const location = await getPlaceDetails(prediction.place_id);
       if (location) {
-        await updateUserLocation(location.lat, location.lng);
-        await fetchNearbyStores(location.lat, location.lng);
+        const stores = await getNearbyGroceryStores(location.lat, location.lng);
+        setNearbyStores(stores);
         
         // Update user preferences with selected city
         const currentUser = auth().currentUser;
@@ -196,16 +128,6 @@ export default function GrocerySettingsScreen() {
     }
     
     setLoading(false);
-  };
-
-  const fetchNearbyStores = async (latitude: number, longitude: number) => {
-    try {
-      const stores = await getNearbyGroceryStores(latitude, longitude);
-      setNearbyStores(stores);
-    } catch (error) {
-      console.error('Error fetching nearby stores:', error);
-      Alert.alert('Error', 'Failed to fetch nearby stores. Please try again.');
-    }
   };
 
   const selectPreferredStore = async (store: GroceryStore) => {
@@ -290,15 +212,6 @@ export default function GrocerySettingsScreen() {
         </View>
       )}
 
-      {!locationPermission && (
-        <TouchableOpacity
-          style={styles.locationButton}
-          onPress={handleRequestPermission}
-        >
-          <Text style={styles.locationButtonText}>Use Current Location</Text>
-        </TouchableOpacity>
-      )}
-
       {userPreferences?.preferredStore && (
         <View style={styles.preferredStoreContainer}>
           <Text style={styles.sectionTitle}>Your Preferred Store</Text>
@@ -333,7 +246,7 @@ export default function GrocerySettingsScreen() {
           )}
         />
       ) : (
-        <Text style={styles.noStoresText}>No stores found nearby. Try searching for a different location.</Text>
+        <Text style={styles.noStoresText}>Search for a location to find stores.</Text>
       )}
     </View>
   );
@@ -416,6 +329,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  locationIcon: {
+    marginRight: 8,
   },
   locationButtonText: {
     color: '#fff',

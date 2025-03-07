@@ -1,17 +1,54 @@
-import { Image, View, StyleSheet, KeyboardAvoidingView, TextInput, TouchableOpacity, ActivityIndicator, Text, Platform } from "react-native";
+import { Image, View, StyleSheet, KeyboardAvoidingView, TextInput, TouchableOpacity, ActivityIndicator, Text, Platform, Alert } from "react-native";
 import React, {useState} from "react";
 import auth from '@react-native-firebase/auth';
 import { Ionicons } from '@expo/vector-icons';
+import { request, PERMISSIONS, RESULTS } from 'react-native-permissions';
 
 export default function Index() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const requestLocationPermission = async () => {
+    try {
+      const result = await request(
+        Platform.OS === 'ios' 
+          ? PERMISSIONS.IOS.LOCATION_WHEN_IN_USE 
+          : PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION
+      );
+      return result;
+    } catch (error) {
+      console.error('Error requesting location permission:', error);
+      return RESULTS.DENIED;
+    }
+  };
+
   const signUp = async () => {
     setLoading(true);
     try {
-      await auth().createUserWithEmailAndPassword(email, password);
+      const userCredential = await auth().createUserWithEmailAndPassword(email, password);
+      
+      // After successful account creation, prompt for location permission
+      Alert.alert(
+        'Location Access',
+        'Would you like to enable location services to find grocery stores near you?',
+        [
+          {
+            text: 'No, Thanks',
+            style: 'cancel',
+          },
+          {
+            text: 'Yes, Enable',
+            onPress: async () => {
+              const permissionResult = await requestLocationPermission();
+              if (permissionResult === RESULTS.GRANTED) {
+                console.log('Location permission granted');
+              }
+            },
+          },
+        ],
+        { cancelable: true }
+      );
     } catch (e: any) {
       alert(e.message);
     } finally {

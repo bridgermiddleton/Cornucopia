@@ -131,7 +131,6 @@ export const getNearbyGroceryStores = async (
     });
     
     const data = await response.json();
-    console.log('Raw Nearby Search Response:', JSON.stringify(data, null, 2));
     
     if (response.ok && data.places) {
       // Filter out places that don't match our criteria for grocery stores

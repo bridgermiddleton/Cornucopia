@@ -1388,10 +1388,6 @@ PODS:
     - nanopb/encode (= 3.30910.0)
   - nanopb/decode (3.30910.0)
   - nanopb/encode (3.30910.0)
-  - Permission-LocationAlways (3.10.1):
-    - RNPermissions
-  - Permission-LocationWhenInUse (3.10.1):
-    - RNPermissions
   - Permission-Notifications (3.10.1):
     - RNPermissions
   - RCT-Folly (2024.01.01.00):
@@ -3304,8 +3300,6 @@ DEPENDENCIES:
   - fmt (from `../node_modules/react-native/third-party-podspecs/fmt.podspec`)
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
-  - Permission-LocationAlways (from `../node_modules/react-native-permissions/ios/LocationAlways`)
-  - Permission-LocationWhenInUse (from `../node_modules/react-native-permissions/ios/LocationWhenInUse`)
   - Permission-Notifications (from `../node_modules/react-native-permissions/ios/Notifications`)
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
   - RCT-Folly/Fabric (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
@@ -3452,10 +3446,6 @@ EXTERNAL SOURCES:
   hermes-engine:
     :podspec: "../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec"
     :tag: hermes-2024-11-12-RNv0.76.2-5b4aa20c719830dcf5684832b89a6edb95ac3d64
-  Permission-LocationAlways:
-    :path: "../node_modules/react-native-permissions/ios/LocationAlways"
-  Permission-LocationWhenInUse:
-    :path: "../node_modules/react-native-permissions/ios/LocationWhenInUse"
   Permission-Notifications:
     :path: "../node_modules/react-native-permissions/ios/Notifications"
   RCT-Folly:
@@ -3645,8 +3635,6 @@ SPEC CHECKSUMS:
   hermes-engine: eb4a80f6bf578536c58a44198ec93a30f6e69218
   leveldb-library: cc8b8f8e013647a295ad3f8cd2ddf49a6f19be19
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
-  Permission-LocationAlways: af165dee8a5a5888df6764f9f6ba98b112893709
-  Permission-LocationWhenInUse: e4a1bdc6b9f4a7a598613a6a748bd186e937df34
   Permission-Notifications: e254bc5abf9c33a6ac6b9f68f4c406d5bf7ab46e
   RCT-Folly: 84578c8756030547307e4572ab1947de1685c599
   RCTDeprecation: 7691283dd69fed46f6653d376de6fa83aaad774c
@@ -3723,6 +3711,6 @@ SPEC CHECKSUMS:
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   Yoga: d213adae4f2c5518e9b19f919afa25a73848ecfb
 
-PODFILE CHECKSUM: e99340c2826c0335ea1915a297be09dde91ceaa0
+PODFILE CHECKSUM: 570190f270496388336613c2b7e9631069c8bc29
 
 COCOAPODS: 1.16.2
