@@ -31,6 +31,17 @@ export default function TabsLayout() {
             ),
           }}
         />
+
+        {/* Grocery List Tab */}
+        <Tabs.Screen
+          name="grocery-list" // Matches recipes.tsx
+          options={{
+            title: 'Grocery List',
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="list" color={color} size={size} />
+            ),
+          }}
+        />
   
          {/* Profile Tab */}
         <Tabs.Screen
@@ -47,7 +58,7 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="grocery-settings"
           options={{
-            tabBarButton: () => null
+            href: null,
           }}
         />
       </Tabs>
