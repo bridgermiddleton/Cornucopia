@@ -16,6 +16,10 @@ prepare_react_native_project!
 target 'Cornucopia' do
   use_expo_modules!
 
+  # Add permissions pods
+  permissions_path = '../node_modules/react-native-permissions/ios'
+  pod 'Permission-Notifications', :path => "#{permissions_path}/Notifications"
+
   if ENV['EXPO_USE_COMMUNITY_AUTOLINKING'] == '1'
     config_command = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"];
   else

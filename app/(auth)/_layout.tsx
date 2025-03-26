@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+
 export default function TabsLayout() {
     return (
       <Tabs
@@ -30,39 +31,18 @@ export default function TabsLayout() {
             ),
           }}
         />
-  
-        {/* Budget Tab */}
+
+        {/* Grocery List Tab */}
         <Tabs.Screen
-          name="budget" // Matches budget.tsx
+          name="grocery-list" // Matches recipes.tsx
           options={{
-            title: 'Budget',
+            title: 'Grocery List',
             tabBarIcon: ({ color, size }) => (
-              <Ionicons name="wallet" color={color} size={size} />
+              <Ionicons name="list" color={color} size={size} />
             ),
           }}
         />
   
-        {/* Grocery Stores Tab */}
-        <Tabs.Screen
-          name="grocerystores" // Matches grocerystores.tsx
-          options={{
-            title: 'Stores',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="storefront" color={color} size={size} />
-            ),
-          }}
-        />
-  
-        {/* Recipes Tab */}
-        <Tabs.Screen
-          name="recipes" // Matches recipes.tsx
-          options={{
-            title: 'Recipes',
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="book" color={color} size={size} />
-            ),
-          }}
-        />
          {/* Profile Tab */}
         <Tabs.Screen
           name="profile" // Matches recipes.tsx
@@ -71,6 +51,14 @@ export default function TabsLayout() {
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="person" color={color} size={size} />
             ),
+          }}
+        />
+
+        {/* Hide grocery-settings from navigation */}
+        <Tabs.Screen
+          name="grocery-settings"
+          options={{
+            href: null,
           }}
         />
       </Tabs>
