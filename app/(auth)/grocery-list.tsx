@@ -88,10 +88,23 @@ interface MealPlan {
   meals: Meal[];
 }
 
+interface Recipe {
+  name: string;
+  cuisine: string;
+  ingredients: {
+    item: string;
+    amount: string;
+    unit: string;
+    source: "grocery" | "fridge";
+  }[];
+  instructions: string;
+}
+
 interface ShoppingItem {
   name: string;
   quantity: string;
-  estimatedPrice: string;
+  price: string;
+  totalPrice: string;
   note?: string;
 }
 
@@ -105,18 +118,17 @@ interface Store {
   address: string;
 }
 
+interface FridgeItemUsed {
+  item: string;
+  amountUsed: string;
+}
+
 interface GroceryList {
-  store: Store;
-  mealPlan: MealPlan[];
-  shoppingList: ShoppingCategory[];
-  estimatedCost: string;
-  savings: string;
+  finalList: ShoppingCategory[];
+  recipes: Recipe[];
+  totalCost: string;
   remainingBudget: string;
-  fridgeItemsUsed: {
-    item: string;
-    amountNeeded: string;
-    recipes: string[];
-  }[];
+  optimizationNotes?: string;
 }
 
 export default function GroceryListScreen() {
@@ -308,8 +320,6 @@ export default function GroceryListScreen() {
       `${item.name} (${item.quantity} ${item.unit}, expires: ${item.expirationDate})`
     ).join("\n") || "Empty";
 
-    console.log('Fridge inventory being sent to prompt:', fridgeInventory);
-  
     const storeDetails = storePreference
       ? `${storePreference.name}, ${storePreference.address}${storePreference.location ? ` (Coordinates: ${storePreference.location.lat}, ${storePreference.location.lng})` : ""}`
       : "Local stores nearby";
@@ -317,85 +327,96 @@ export default function GroceryListScreen() {
     const budgetText = preferences.budget ? `$${preferences.budget}` : "Flexible budget";
   
     return `
-  You are an advanced meal-planning AI. Create a comprehensive grocery list and meal plan that maximizes the given budget for high-quality ingredients and diverse meals.
+You are an advanced meal-planning AI specialized in creating detailed, accurate, and budget-friendly meal plans and grocery lists based strictly on user preferences, existing fridge inventory, and grocery store prices.
 
-  ### User Preferences:
-  - **Dietary Restrictions**: ${selectedDietary}
-  - **Preferred Cuisines**: ${selectedCuisines}
-  - **Meal Types Requested**: ${selectedMeals}
-  - **Meal Planning Duration**: ${preferences.daysToMealPlan} days
-  - **Weekly Budget**: ${budgetText}
-  - **Meal Repetition Allowed**: ${preferences.allowMealRepetition ? "Yes" : "No"}
-  
-  ### Fridge Inventory:
-  ${fridgeInventory}
-  
-  ### Grocery Store for Shopping:
-  ${storeDetails}
-  
-  ### Instructions:
-  1. Generate a complete ${preferences.daysToMealPlan}-day meal plan with diverse, filling meals.
-  2. IMPORTANT: Use as much of the ${budgetText} as possible. This is your target spending amount, not a maximum limit.
-  3. Focus on:
-     - High-quality ingredients
-     - Proper portion sizes
-     - Variety in meals
-     - Premium items when budget allows
-  4. Create a shopping list that:
-     - Uses ACTUAL package sizes (e.g., eggs in dozen)
-     - Shows REAL prices from ${storePreference?.name || "local stores"}
-     - Includes premium or organic options when budget permits
-     - Groups items by store department
-  5. Aim to get within 90-100% of the budget for better meal quality and variety.
-  
-  ### Response Format (STRICT JSON ONLY):
-  {
-    "store": {
-      "name": "Store Name",
-      "address": "Store Address"
-    },
-    "mealPlan": [
-      {
-        "day": "Monday",
-        "date": "YYYY-MM-DD",
-        "meals": [
-          {
-            "type": "Breakfast/Lunch/Dinner",
-            "recipe": "Recipe name"
-          }
-        ]
-      }
-    ],
-    "shoppingList": [
-      {
-        "category": "Category name (e.g., Produce, Dairy)",
-        "items": [
-          {
-            "name": "Item name with brand if relevant",
-            "quantity": "Full package size (e.g., 1 dozen, 16 oz package)",
-            "estimatedPrice": "$X.XX",
-            "note": "Optional note about premium/organic options"
-          }
-        ]
-      }
-    ],
-    "fridgeItemsUsed": [
-      {
-        "item": "Item name",
-        "amountNeeded": "Amount needed for recipes",
-        "recipes": ["Recipe 1", "Recipe 2"]
-      }
-    ],
-    "estimatedCost": "$Total cost",
-    "remainingBudget": "$Remaining from budget"
-  }
-  
-  **Important**: 
-  1. Return ONLY valid JSON
-  2. Include ALL ${preferences.daysToMealPlan} days in the meal plan
-  3. Use REALISTIC package sizes and prices
-  4. Aim to use 90-100% of the ${budgetText}
-  5. Include premium or organic options to reach the target budget
+User Preferences:
+Dietary Restrictions: ${selectedDietary}
+Preferred Cuisines: ${selectedCuisines}
+Meal Types Requested: ${selectedMeals}
+Meal Planning Duration: ${preferences.daysToMealPlan} days
+Weekly Budget: ${budgetText}
+Meal Repetition Allowed: ${preferences.allowMealRepetition ? "Yes" : "No"}
+
+Fridge Inventory (MUST ONLY use these items if not purchased new): ${fridgeInventory}
+
+Shopping Store: ${storeDetails}
+
+Instructions:
+
+1. Meal Plan Requirements:
+   - Generate a ${preferences.daysToMealPlan}-day meal plan.
+   - ONLY use ingredients from the fridge inventory or items explicitly listed in the generated shopping list.
+   - Meals must strictly comply with dietary restrictions and preferred cuisines.
+   - Include diverse, filling, and nutritious meals.
+   - Meal repetition allowed: ${preferences.allowMealRepetition ? "Yes" : "No"}.
+
+2. Grocery List Requirements:
+   - Calculate quantities EXACTLY (no partial packages; use full packages only, e.g., "2 dozen eggs").
+   - Use REAL and ACCURATE current prices from ${storePreference?.name || "local stores"}.
+   - Multiply unit price by quantity explicitly (e.g., "3 packages × $4.00 per package = $12.00").
+   - Clearly state unit prices in "note" for each item (e.g., "$4.00 per package").
+   - Group items neatly by store department (Produce, Dairy, Meat, etc.).
+
+3. Price Accuracy & Calculations:
+   - Ensure total grocery price (estimatedCost) is exactly the mathematical sum of each item price.
+   - Remaining budget (remainingBudget) = original budget minus estimatedCost.
+   - ALL prices MUST:
+     - Start with a dollar sign ($)
+     - Show cents explicitly (e.g., "$5.00" rather than "$5")
+     - Reflect TOTAL price clearly.
+
+4. Fridge Inventory Usage:
+   - Clearly document fridge items used, the exact amounts, and specify which meals use them.
+
+STRICT RULES:
+- DO NOT include ingredients in any recipe that are NOT explicitly purchased OR listed in the fridge inventory.
+- Double-check ALL mathematical calculations for accuracy.
+- Aim to utilize at least 90% and up to 100% of the given budget.
+
+Return ONLY a strictly valid JSON response formatted exactly like this:
+
+{
+  "store": {
+    "name": "Store Name",
+    "address": "Store Address"
+  },
+  "mealPlan": [
+    {
+      "day": "Day of week",
+      "date": "YYYY-MM-DD",
+      "meals": [
+        {
+          "type": "Breakfast/Lunch/Dinner",
+          "recipe": "Recipe Name",
+          "ingredientsUsed": ["ingredient1", "ingredient2"]
+        }
+      ]
+    }
+  ],
+  "shoppingList": [
+    {
+      "category": "Store Category",
+      "items": [
+        {
+          "name": "Exact item name with brand if relevant",
+          "quantity": "Full packages (e.g., 2 packages, 3 dozen)",
+          "estimatedPrice": "$X.XX (calculated explicitly)",
+          "note": "Unit price clearly indicated (e.g., $4.00 per package)"
+        }
+      ]
+    }
+  ],
+  "fridgeItemsUsed": [
+    {
+      "item": "Fridge item name",
+      "amountNeeded": "Exact amount needed",
+      "recipes": ["Recipe 1", "Recipe 2"]
+    }
+  ],
+  "estimatedCost": "$X.XX (Sum of all shoppingList item prices)",
+  "remainingBudget": "$X.XX (Budget minus estimatedCost)"
+}
+
   `;
   };
   
@@ -403,42 +424,344 @@ export default function GroceryListScreen() {
   const generateGroceryList = async () => {
     setGenerating(true);
     try {
-      const prompt = generatePrompt();
+      // Stage 1: Initial Grocery List
+      const stage1Prompt = `Create a grocery list for ${preferences.daysToMealPlan} days with a budget of $${preferences.budget}.
+      Dietary restrictions: ${preferences.dietaryRestrictions.filter(r => r.selected).map(r => r.name).join(", ") || "None"}
+      Cuisines: ${preferences.cuisineTypes.filter(c => c.selected).map(c => c.name).join(", ") || "Any"}
       
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4-turbo",
+      Return a JSON object with this exact structure:
+      {
+        "initialList": [
+          {
+            "category": "Category name",
+            "items": [
+              {
+                "name": "Item name",
+                "quantity": "Quantity needed",
+                "estimatedPrice": "$X.XX"
+              }
+            ]
+          }
+        ],
+        "totalEstimatedCost": "$X.XX"
+      }`;
+
+      console.log('Stage 1 Prompt:', stage1Prompt);
+
+      const stage1Completion = await openai.chat.completions.create({
+        model: "gpt-4-turbo-preview",
         messages: [{
           role: "system",
-          content: "You are a meal planning assistant that ONLY responds with valid JSON. Your entire response must be a valid JSON object with no additional text, markdown, or explanations. If you include any text outside the JSON structure, it will cause errors."
+          content: "You are a grocery list generator. Return ONLY a valid JSON object with no additional text."
         }, {
           role: "user",
-          content: prompt
+          content: stage1Prompt
+        }],
+        temperature: 0.7,
+        max_tokens: 1000
+      });
+
+      if (!stage1Completion.choices[0]?.message?.content) {
+        throw new Error('No response from OpenAI Stage 1');
+      }
+
+      console.log('Stage 1 Response:', stage1Completion.choices[0].message.content);
+
+      let stage1Result;
+      try {
+        const content = stage1Completion.choices[0].message.content.trim();
+        // Remove any markdown code block markers if present
+        const cleanContent = content.replace(/```json\n?|\n?```/g, '');
+        stage1Result = JSON.parse(cleanContent);
+        
+        // Validate the response structure
+        if (!stage1Result.initialList || !Array.isArray(stage1Result.initialList) || !stage1Result.totalEstimatedCost) {
+          throw new Error('Invalid response structure');
+        }
+      } catch (parseError) {
+        console.error('Stage 1 JSON Parse Error:', parseError);
+        console.error('Raw response:', stage1Completion.choices[0].message.content);
+        throw new Error('Invalid JSON response from Stage 1');
+      }
+
+      // Stage 2: Refine with Fridge Items
+      const stage2Prompt = `Refine this grocery list based on fridge contents:
+      Initial List: ${JSON.stringify(stage1Result.initialList)}
+      
+      Fridge Contents: ${fridgeItems.map(item => 
+        `${item.name} (${item.quantity} ${item.unit})`
+      ).join(", ")}
+      
+      Dietary Restrictions: ${preferences.dietaryRestrictions.filter(r => r.selected).map(r => r.name).join(", ")}
+      Budget: ${preferences.budget}
+      
+      Return a JSON object with this exact structure:
+      {
+        "refinedList": [
+          {
+            "category": "Category name",
+            "items": [
+              {
+                "name": "Item name",
+                "quantity": "Quantity needed",
+                "price": "$X.XX per unit",
+                "totalPrice": "$X.XX",
+                "note": "Any relevant notes"
+              }
+            ]
+          }
+        ],
+        "fridgeItemsUsed": [
+          {
+            "item": "Fridge item name",
+            "amountUsed": "Amount used"
+          }
+        ],
+        "totalCost": "$X.XX"
+      }`;
+
+      console.log('Stage 2 Prompt:', stage2Prompt);
+
+      const stage2Completion = await openai.chat.completions.create({
+        model: "gpt-4-turbo-preview",
+        messages: [{
+          role: "system",
+          content: "You are a grocery list refiner. Return ONLY a valid JSON object with no additional text."
+        }, {
+          role: "user",
+          content: stage2Prompt
+        }],
+        temperature: 0.7,
+        max_tokens: 1000
+      });
+
+      if (!stage2Completion.choices[0]?.message?.content) {
+        throw new Error('No response from OpenAI Stage 2');
+      }
+
+      console.log('Stage 2 Response:', stage2Completion.choices[0].message.content);
+
+      let stage2Result;
+      try {
+        const content = stage2Completion.choices[0].message.content.trim();
+        // Remove any markdown code block markers if present
+        const cleanContent = content.replace(/```json\n?|\n?```/g, '');
+        stage2Result = JSON.parse(cleanContent);
+        
+        // Validate the response structure
+        if (!stage2Result.refinedList || !Array.isArray(stage2Result.refinedList) || 
+            !stage2Result.fridgeItemsUsed || !Array.isArray(stage2Result.fridgeItemsUsed) || 
+            !stage2Result.totalCost) {
+          throw new Error('Invalid response structure');
+        }
+      } catch (parseError) {
+        console.error('Stage 2 JSON Parse Error:', parseError);
+        console.error('Raw response:', stage2Completion.choices[0].message.content);
+        throw new Error('Invalid JSON response from Stage 2');
+      }
+
+      // Stage 3: Generate Recipes
+      const stage3Prompt = `Generate recipes using these ingredients:
+      Grocery List: ${JSON.stringify(stage2Result.refinedList)}
+      Fridge Items Used: ${JSON.stringify(stage2Result.fridgeItemsUsed)}
+      
+      Number of Days: ${preferences.daysToMealPlan}
+      Cuisines: ${preferences.cuisineTypes.filter(c => c.selected).map(c => c.name).join(", ")}
+      Dietary Restrictions: ${preferences.dietaryRestrictions.filter(r => r.selected).map(r => r.name).join(", ")}
+      
+      Return a JSON object with this exact structure:
+      {
+        "recipes": [
+          {
+            "name": "Recipe name",
+            "cuisine": "Cuisine type",
+            "ingredients": [
+              {
+                "item": "Ingredient name",
+                "amount": "Amount needed",
+                "unit": "Unit of measurement",
+                "source": "grocery" or "fridge"
+              }
+            ],
+            "instructions": "Step-by-step instructions"
+          }
+        ]
+      }`;
+
+      console.log('Stage 3 Prompt:', stage3Prompt);
+
+      const stage3Completion = await openai.chat.completions.create({
+        model: "gpt-4-turbo-preview",
+        messages: [{
+          role: "system",
+          content: "You are a recipe generator. Return ONLY a valid JSON object with no additional text."
+        }, {
+          role: "user",
+          content: stage3Prompt
+        }],
+        temperature: 0.7,
+        max_tokens: 1000
+      });
+
+      if (!stage3Completion.choices[0]?.message?.content) {
+        throw new Error('No response from OpenAI Stage 3');
+      }
+
+      console.log('Stage 3 Response:', stage3Completion.choices[0].message.content);
+
+      let stage3Result;
+      try {
+        const content = stage3Completion.choices[0].message.content.trim();
+        // Remove any markdown code block markers if present
+        const cleanContent = content.replace(/```json\n?|\n?```/g, '');
+        stage3Result = JSON.parse(cleanContent);
+        
+        // Validate the response structure
+        if (!stage3Result.recipes || !Array.isArray(stage3Result.recipes)) {
+          throw new Error('Invalid response structure');
+        }
+
+        // Validate each recipe has required fields
+        stage3Result.recipes.forEach((recipe: any, index: number) => {
+          if (!recipe.name || !recipe.cuisine || !recipe.ingredients || !Array.isArray(recipe.ingredients) || !recipe.instructions) {
+            throw new Error(`Invalid recipe structure at index ${index}`);
+          }
+        });
+      } catch (parseError) {
+        console.error('Stage 3 JSON Parse Error:', parseError);
+        console.error('Raw response:', stage3Completion.choices[0].message.content);
+        throw new Error('Invalid JSON response from Stage 3');
+      }
+
+      // Stage 4: Final Budget Check
+      const stage4Prompt = `Validate and optimize this meal plan:
+      Grocery List: ${JSON.stringify(stage2Result.refinedList)}
+      Recipes: ${JSON.stringify(stage3Result.recipes)}
+      Budget: ${preferences.budget}
+      Current Total: ${stage2Result.totalCost}
+      
+      Return a JSON object with this exact structure:
+      {
+        "finalList": [
+          {
+            "category": "Category name",
+            "items": [
+              {
+                "name": "Item name",
+                "quantity": "Quantity needed",
+                "price": "$X.XX per unit",
+                "totalPrice": "$X.XX"
+              }
+            ]
+          }
+        ],
+        "recipes": [
+          {
+            "name": "Recipe name",
+            "ingredients": [
+              {
+                "item": "Ingredient name",
+                "amount": "Amount needed",
+                "unit": "Unit of measurement",
+                "source": "grocery" or "fridge"
+              }
+            ],
+            "instructions": "Step-by-step instructions"
+          }
+        ],
+        "totalCost": "$X.XX",
+        "remainingBudget": "$X.XX",
+        "optimizationNotes": "Any notes about budget optimization"
+      }`;
+
+      console.log('Stage 4 Prompt:', stage4Prompt);
+
+      const stage4Completion = await openai.chat.completions.create({
+        model: "gpt-4-turbo-preview",
+        messages: [{
+          role: "system",
+          content: "You are a budget validator. Return ONLY a valid JSON object with no additional text. Ensure all prices are formatted with dollar signs and cents (e.g., $10.00)."
+        }, {
+          role: "user",
+          content: stage4Prompt
         }],
         temperature: 0.7,
         max_tokens: 2000
       });
 
-      if (!completion.choices[0]?.message?.content) {
-        throw new Error('No response from OpenAI');
+      if (!stage4Completion.choices[0]?.message?.content) {
+        throw new Error('No response from OpenAI Stage 4');
       }
 
+      console.log('Stage 4 Raw Response:', stage4Completion.choices[0].message.content);
+
+      let finalResult;
       try {
-        // Attempt to extract JSON if there's any extra text
-        const content = completion.choices[0].message.content;
-        const jsonStart = content.indexOf('{');
-        const jsonEnd = content.lastIndexOf('}') + 1;
-        const jsonStr = content.slice(jsonStart, jsonEnd);
+        const content = stage4Completion.choices[0].message.content.trim();
+        // Remove any markdown code block markers if present
+        const cleanContent = content.replace(/```json\n?|\n?```/g, '');
+        console.log('Stage 4 Cleaned Content:', cleanContent);
         
-        const result = JSON.parse(jsonStr);
-        setGeneratedList(result);
-        setShowResults(true);
-      } catch (parseError) {
-        console.error('JSON Parse Error:', parseError);
-        Alert.alert('Error', 'Failed to parse the generated list. Please try again.');
+        finalResult = JSON.parse(cleanContent);
+        console.log('Stage 4 Parsed Result:', JSON.stringify(finalResult, null, 2));
+        
+        // Validate the response structure
+        if (!finalResult.finalList || !Array.isArray(finalResult.finalList)) {
+          throw new Error('Missing or invalid finalList array');
+        }
+        if (!finalResult.recipes || !Array.isArray(finalResult.recipes)) {
+          throw new Error('Missing or invalid recipes array');
+        }
+        if (!finalResult.totalCost || typeof finalResult.totalCost !== 'string' || !finalResult.totalCost.startsWith('$')) {
+          throw new Error('Invalid totalCost format');
+        }
+        if (!finalResult.remainingBudget || typeof finalResult.remainingBudget !== 'string' || !finalResult.remainingBudget.startsWith('$')) {
+          throw new Error('Invalid remainingBudget format');
+        }
+
+        // Validate each category in finalList
+        finalResult.finalList.forEach((category: any, index: number) => {
+          if (!category.category || !Array.isArray(category.items)) {
+            throw new Error(`Invalid category structure at index ${index}`);
+          }
+          category.items.forEach((item: any, itemIndex: number) => {
+            if (!item.name || !item.quantity || !item.price || !item.totalPrice) {
+              throw new Error(`Invalid item structure in category ${category.category} at index ${itemIndex}`);
+            }
+          });
+        });
+
+        // Validate each recipe
+        finalResult.recipes.forEach((recipe: any, index: number) => {
+          if (!recipe.name || !Array.isArray(recipe.ingredients) || !recipe.instructions) {
+            throw new Error(`Invalid recipe structure at index ${index}`);
+          }
+          recipe.ingredients.forEach((ingredient: any, ingIndex: number) => {
+            if (!ingredient.item || !ingredient.amount || !ingredient.source) {
+              throw new Error(`Invalid ingredient structure in recipe ${recipe.name} at index ${ingIndex}`);
+            }
+            // Only validate unit if amount is not "as needed" or similar
+            if (ingredient.amount !== "as needed" && !ingredient.unit) {
+              throw new Error(`Missing unit for ingredient ${ingredient.item} in recipe ${recipe.name}`);
+            }
+          });
+        });
+
+      } catch (parseError: any) {
+        console.error('Stage 4 JSON Parse Error:', parseError);
+        console.error('Raw response:', stage4Completion.choices[0].message.content);
+        throw new Error(`Invalid JSON response from Stage 4: ${parseError.message}`);
       }
+
+      setGeneratedList(finalResult);
+      setShowResults(true);
+
     } catch (error) {
       console.error('Error generating list:', error);
-      Alert.alert('Error', 'Failed to generate grocery list. Please try again.');
+      Alert.alert(
+        'Error',
+        'Failed to generate grocery list. Please try again. If the problem persists, please check your internet connection and try again.'
+      );
     } finally {
       setGenerating(false);
     }
@@ -450,7 +773,7 @@ export default function GroceryListScreen() {
     return (
       <View style={styles.resultsCard}>
         <View style={styles.resultsHeader}>
-          <Text style={styles.resultsTitle}>Meal Plan & Grocery List</Text>
+          <Text style={styles.resultsTitle}>Meal Plan & Shopping List</Text>
           <TouchableOpacity 
             style={styles.closeButton}
             onPress={() => setShowResults(false)}
@@ -460,35 +783,37 @@ export default function GroceryListScreen() {
         </View>
   
         <ScrollView style={styles.resultsContent}>
-          {/* Store & Budget Summary */}
+          {/* Budget Summary */}
           <View style={styles.summaryContainer}>
-            <Text style={styles.storeTitle}>{generatedList.store.name}</Text>
-            <Text style={styles.storeAddress}>{generatedList.store.address}</Text>
-            <View style={styles.budgetInfo}>
-              <Text style={styles.estimatedCost}>Total Cost: {generatedList.estimatedCost}</Text>
-              <Text style={styles.remainingBudget}>
-                Remaining Budget: {generatedList.remainingBudget}
-              </Text>
-            </View>
+            <Text style={styles.estimatedCost}>Total Cost: {generatedList.totalCost}</Text>
+            <Text style={styles.remainingBudget}>
+              Remaining Budget: {generatedList.remainingBudget}
+            </Text>
+            {generatedList.optimizationNotes && (
+              <Text style={styles.optimizationNotes}>{generatedList.optimizationNotes}</Text>
+            )}
           </View>
   
-          {/* Meal Plan */}
-          <Text style={styles.sectionHeader}>📅 Weekly Meal Plan</Text>
-          {generatedList.mealPlan.map((day, idx) => (
-            <View key={idx} style={styles.daySection}>
-              <Text style={styles.dayHeader}>{day.day}, {day.date}</Text>
-              {day.meals.map((meal, midx) => (
-                <View key={midx} style={styles.mealItem}>
-                  <Text style={styles.mealType}>{meal.type}:</Text>
-                  <Text style={styles.recipeName}>{meal.recipe}</Text>
-                </View>
+          {/* Recipes */}
+          <Text style={styles.sectionHeader}>🍳 Recipes</Text>
+          {generatedList.recipes.map((recipe, idx) => (
+            <View key={idx} style={styles.recipeSection}>
+              <Text style={styles.recipeName}>{recipe.name}</Text>
+              <Text style={styles.recipeCuisine}>{recipe.cuisine}</Text>
+              <Text style={styles.recipeInstructions}>{recipe.instructions}</Text>
+              <Text style={styles.ingredientsTitle}>Ingredients:</Text>
+              {recipe.ingredients.map((ingredient, ingIdx) => (
+                <Text key={ingIdx} style={styles.ingredientItem}>
+                  • {ingredient.amount} {ingredient.unit} {ingredient.item}
+                  {ingredient.source === "fridge" ? " (from fridge)" : ""}
+                </Text>
               ))}
             </View>
           ))}
   
           {/* Shopping List */}
           <Text style={styles.sectionHeader}>🛒 Shopping List</Text>
-          {generatedList.shoppingList.map((cat, cidx) => (
+          {generatedList.finalList.map((cat, cidx) => (
             <View key={cidx} style={styles.categorySection}>
               <Text style={styles.categoryHeader}>{cat.category}</Text>
               {cat.items.map((item, itemIdx) => (
@@ -501,27 +826,14 @@ export default function GroceryListScreen() {
                       <Text style={styles.itemNote}>{item.note}</Text>
                     )}
                   </View>
-                  <Text style={styles.priceText}>{item.estimatedPrice}</Text>
+                  <View style={styles.priceDetails}>
+                    <Text style={styles.priceText}>{item.price}</Text>
+                    <Text style={styles.totalPriceText}>{item.totalPrice}</Text>
+                  </View>
                 </View>
               ))}
             </View>
           ))}
-
-          {/* Fridge Items Used */}
-          <Text style={styles.sectionHeader}>🧊 Items Used from Your Fridge</Text>
-          <View style={styles.fridgeItemsSection}>
-            {generatedList.fridgeItemsUsed.map((item, idx) => (
-              <View key={idx} style={styles.fridgeItemContainer}>
-                <View style={styles.fridgeItemHeader}>
-                  <Text style={styles.fridgeItemName}>{item.item}</Text>
-                  <Text style={styles.fridgeItemAmount}>{item.amountNeeded}</Text>
-                </View>
-                <Text style={styles.fridgeItemRecipes}>
-                  Used in: {item.recipes.join(', ')}
-                </Text>
-              </View>
-            ))}
-          </View>
         </ScrollView>
       </View>
     );
@@ -797,16 +1109,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 16,
   },
-  storeTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  storeAddress: {
-    fontSize: 14,
-    color: '#555',
-    marginVertical: 4,
-  },
   estimatedCost: {
     fontSize: 18,
     fontWeight: '700',
@@ -829,32 +1131,38 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 20,
   },
-  daySection: {
+  recipeSection: {
     marginBottom: 16,
     padding: 12,
     backgroundColor: '#FAFAFA',
     borderRadius: 10,
   },
-  dayHeader: {
+  recipeName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#4A90E2',
+    color: '#333',
     marginBottom: 8,
   },
-  mealItem: {
-    marginBottom: 12,
-    paddingLeft: 8,
-  },
-  mealType: {
-    fontSize: 15,
-    fontWeight: '600',
+  recipeCuisine: {
+    fontSize: 14,
     color: '#555',
     marginBottom: 4,
   },
-  recipeName: {
+  recipeInstructions: {
     fontSize: 14,
-    color: '#444',
-    marginLeft: 8,
+    color: '#555',
+    marginBottom: 8,
+  },
+  ingredientsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 8,
+  },
+  ingredientItem: {
+    fontSize: 14,
+    color: '#555',
+    marginBottom: 4,
   },
   categorySection: {
     marginBottom: 16,
@@ -879,22 +1187,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#444',
   },
+  priceDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   priceText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#27AE60',
   },
-  budgetInfo: {
-    marginTop: 12,
-    padding: 8,
-    backgroundColor: '#E8F5E9',
-    borderRadius: 8,
-  },
-  remainingBudget: {
-    fontSize: 16,
+  totalPriceText: {
+    fontSize: 14,
     fontWeight: '600',
-    color: '#2E7D32',
-    marginTop: 4,
+    color: '#27AE60',
+    marginLeft: 8,
   },
   itemDetails: {
     flex: 1,
@@ -907,38 +1213,15 @@ const styles = StyleSheet.create({
     marginLeft: 16,
     marginTop: 2,
   },
-  fridgeItemsSection: {
-    backgroundColor: '#F5F5F5',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 16,
-  },
-  fridgeItemContainer: {
-    marginBottom: 12,
-    padding: 8,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#4A90E2',
-  },
-  fridgeItemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  fridgeItemName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-  },
-  fridgeItemAmount: {
+  optimizationNotes: {
     fontSize: 14,
-    color: '#666',
+    color: '#555',
+    marginTop: 8,
   },
-  fridgeItemRecipes: {
-    fontSize: 13,
-    color: '#666',
-    fontStyle: 'italic',
+  remainingBudget: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginTop: 4,
   },
 }); 
