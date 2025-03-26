@@ -49,6 +49,7 @@ interface UserPreferences {
   budget: string;
   daysToMealPlan: number;
   allowMealRepetition: boolean;
+  selectedRecipes: string[];
 }
 
 interface FridgeItem {
@@ -131,6 +132,24 @@ interface GroceryList {
   optimizationNotes?: string;
 }
 
+interface UserRecipe {
+  id: string;
+  name: string;
+  cuisine: string;
+  prepTime: string;
+  cookTime: string;
+  servings: number;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  ingredients: {
+    item: string;
+    amount: string;
+    unit: string;
+  }[];
+  instructions: string[];
+  notes?: string;
+  isFavorite: boolean;
+}
+
 export default function GroceryListScreen() {
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -158,16 +177,20 @@ export default function GroceryListScreen() {
     budget: '',
     daysToMealPlan: 7,
     allowMealRepetition: true,
+    selectedRecipes: [],
   });
   const [fridgeItems, setFridgeItems] = useState<FridgeItem[]>([]);
   const [generatedList, setGeneratedList] = useState<GroceryList | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [storePreference, setStorePreference] = useState<StorePreference | null>(null);
+  const [userRecipes, setUserRecipes] = useState<UserRecipe[]>([]);
+  const [showRecipeSelector, setShowRecipeSelector] = useState(false);
 
   useEffect(() => {
     loadUserPreferences();
     loadFridgeItems();
     loadStorePreference();
+    loadUserRecipes();
   }, []);
 
   const loadUserPreferences = async () => {
@@ -254,6 +277,29 @@ export default function GroceryListScreen() {
     }
   };
 
+  const loadUserRecipes = async () => {
+    try {
+      const currentUser = auth().currentUser;
+      if (!currentUser) return;
+
+      const recipesRef = firestore()
+        .collection('users')
+        .doc(currentUser.uid)
+        .collection('recipes');
+
+      const snapshot = await recipesRef.get();
+      const loadedRecipes = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as UserRecipe[];
+
+      setUserRecipes(loadedRecipes);
+    } catch (error) {
+      console.error('Error loading recipes:', error);
+      Alert.alert('Error', 'Failed to load your recipes');
+    }
+  };
+
   const savePreferences = async () => {
     setLoading(true);
     try {
@@ -303,6 +349,15 @@ export default function GroceryListScreen() {
     }));
   };
 
+  const toggleRecipeSelection = (recipeId: string) => {
+    setPreferences(prev => ({
+      ...prev,
+      selectedRecipes: prev.selectedRecipes.includes(recipeId)
+        ? prev.selectedRecipes.filter(id => id !== recipeId)
+        : [...prev.selectedRecipes, recipeId]
+    }));
+  };
+
   const generatePrompt = () => {
     const selectedDietary = preferences.dietaryRestrictions
       .filter(r => r.selected)
@@ -315,6 +370,18 @@ export default function GroceryListScreen() {
     const selectedMeals = preferences.mealTypes
       .filter(m => m.selected)
       .map(m => m.name).join(", ") || "All Meals";
+  
+    const selectedRecipes = userRecipes
+      .filter(recipe => preferences.selectedRecipes.includes(recipe.id));
+  
+    const selectedRecipesText = selectedRecipes.length > 0
+      ? `\nSelected User Recipes:\n${selectedRecipes.map(recipe => 
+          `- ${recipe.name} (${recipe.cuisine})\n` +
+          `  Ingredients: ${recipe.ingredients.map(ing => 
+            `${ing.amount} ${ing.unit} ${ing.item}`
+          ).join(', ')}`
+        ).join('\n')}`
+      : '';
   
     const fridgeInventory = fridgeItems.map(item => 
       `${item.name} (${item.quantity} ${item.unit}, expires: ${item.expirationDate})`
@@ -336,6 +403,7 @@ Meal Types Requested: ${selectedMeals}
 Meal Planning Duration: ${preferences.daysToMealPlan} days
 Weekly Budget: ${budgetText}
 Meal Repetition Allowed: ${preferences.allowMealRepetition ? "Yes" : "No"}
+${selectedRecipesText}
 
 Fridge Inventory (MUST ONLY use these items if not purchased new): ${fridgeInventory}
 
@@ -344,34 +412,37 @@ Shopping Store: ${storeDetails}
 Instructions:
 
 1. Meal Plan Requirements:
-   - Generate a ${preferences.daysToMealPlan}-day meal plan.
-   - ONLY use ingredients from the fridge inventory or items explicitly listed in the generated shopping list.
-   - Meals must strictly comply with dietary restrictions and preferred cuisines.
-   - Include diverse, filling, and nutritious meals.
-   - Meal repetition allowed: ${preferences.allowMealRepetition ? "Yes" : "No"}.
+   - Generate a ${preferences.daysToMealPlan}-day meal plan
+   - PRIORITIZE using the selected user recipes where possible
+   - Fill remaining meals with new recipes that match preferences
+   - ONLY use ingredients from the fridge inventory or items explicitly listed in the generated shopping list
+   - Meals must strictly comply with dietary restrictions and preferred cuisines
+   - Include diverse, filling, and nutritious meals
+   - Meal repetition allowed: ${preferences.allowMealRepetition ? "Yes" : "No"}
 
 2. Grocery List Requirements:
-   - Calculate quantities EXACTLY (no partial packages; use full packages only, e.g., "2 dozen eggs").
-   - Use REAL and ACCURATE current prices from ${storePreference?.name || "local stores"}.
-   - Multiply unit price by quantity explicitly (e.g., "3 packages × $4.00 per package = $12.00").
-   - Clearly state unit prices in "note" for each item (e.g., "$4.00 per package").
-   - Group items neatly by store department (Produce, Dairy, Meat, etc.).
+   - Calculate quantities EXACTLY (no partial packages; use full packages only, e.g., "2 dozen eggs")
+   - Use REAL and ACCURATE current prices from ${storePreference?.name || "local stores"}
+   - Multiply unit price by quantity explicitly (e.g., "3 packages × $4.00 per package = $12.00")
+   - Clearly state unit prices in "note" for each item (e.g., "$4.00 per package")
+   - Group items neatly by store department (Produce, Dairy, Meat, etc.)
 
 3. Price Accuracy & Calculations:
-   - Ensure total grocery price (estimatedCost) is exactly the mathematical sum of each item price.
-   - Remaining budget (remainingBudget) = original budget minus estimatedCost.
+   - Ensure total grocery price (estimatedCost) is exactly the mathematical sum of each item price
+   - Remaining budget (remainingBudget) = original budget minus estimatedCost
    - ALL prices MUST:
      - Start with a dollar sign ($)
      - Show cents explicitly (e.g., "$5.00" rather than "$5")
-     - Reflect TOTAL price clearly.
+     - Reflect TOTAL price clearly
 
 4. Fridge Inventory Usage:
-   - Clearly document fridge items used, the exact amounts, and specify which meals use them.
+   - Clearly document fridge items used, the exact amounts, and specify which meals use them
 
 STRICT RULES:
-- DO NOT include ingredients in any recipe that are NOT explicitly purchased OR listed in the fridge inventory.
-- Double-check ALL mathematical calculations for accuracy.
-- Aim to utilize at least 90% and up to 100% of the given budget.
+- DO NOT include ingredients in any recipe that are NOT explicitly purchased OR listed in the fridge inventory
+- Double-check ALL mathematical calculations for accuracy
+- Aim to utilize at least 90% and up to 100% of the given budget
+- PRIORITIZE including selected user recipes in the meal plan
 
 Return ONLY a strictly valid JSON response formatted exactly like this:
 
@@ -416,8 +487,7 @@ Return ONLY a strictly valid JSON response formatted exactly like this:
   "estimatedCost": "$X.XX (Sum of all shoppingList item prices)",
   "remainingBudget": "$X.XX (Budget minus estimatedCost)"
 }
-
-  `;
+`;
   };
   
 
@@ -840,6 +910,66 @@ Return ONLY a strictly valid JSON response formatted exactly like this:
   };
   
 
+  const RecipeSelectorModal = () => (
+    <Modal
+      visible={showRecipeSelector}
+      animationType="slide"
+      onRequestClose={() => setShowRecipeSelector(false)}
+    >
+      <View style={styles.modalContainer}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Select Recipes</Text>
+          <TouchableOpacity
+            onPress={() => setShowRecipeSelector(false)}
+            style={styles.closeButton}
+          >
+            <Ionicons name="close" size={24} color="#333" />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.modalContent}>
+          {userRecipes.map((recipe) => (
+            <TouchableOpacity
+              key={recipe.id}
+              style={[
+                styles.recipeCard,
+                preferences.selectedRecipes.includes(recipe.id) && styles.selectedRecipeCard
+              ]}
+              onPress={() => toggleRecipeSelection(recipe.id)}
+            >
+              <View style={styles.recipeHeader}>
+                <View style={styles.recipeTitleContainer}>
+                  <Text style={styles.modalRecipeName}>{recipe.name}</Text>
+                  <Text style={styles.modalRecipeCuisine}>{recipe.cuisine}</Text>
+                </View>
+                <Ionicons
+                  name={preferences.selectedRecipes.includes(recipe.id) ? 'checkmark-circle' : 'ellipse-outline'}
+                  size={24}
+                  color={preferences.selectedRecipes.includes(recipe.id) ? '#4A90E2' : '#666'}
+                />
+              </View>
+
+              <View style={styles.recipeDetails}>
+                <Text style={styles.detailText}>
+                  <Ionicons name="time-outline" size={16} color="#666" /> {recipe.prepTime} prep
+                </Text>
+                <Text style={styles.detailText}>
+                  <Ionicons name="flame-outline" size={16} color="#666" /> {recipe.cookTime} cook
+                </Text>
+                <Text style={styles.detailText}>
+                  <Ionicons name="people-outline" size={16} color="#666" /> {recipe.servings} servings
+                </Text>
+                <Text style={styles.detailText}>
+                  <Ionicons name="speedometer-outline" size={16} color="#666" /> {recipe.difficulty}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -966,6 +1096,38 @@ Return ONLY a strictly valid JSON response formatted exactly like this:
           ))}
         </View>
 
+        {/* Recipe Selection Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Your Recipes</Text>
+          <TouchableOpacity
+            style={styles.recipeSelectorButton}
+            onPress={() => setShowRecipeSelector(true)}
+          >
+            <Text style={styles.recipeSelectorButtonText}>
+              {preferences.selectedRecipes.length > 0
+                ? `${preferences.selectedRecipes.length} recipe${preferences.selectedRecipes.length > 1 ? 's' : ''} selected`
+                : 'Select Recipes'}
+            </Text>
+          </TouchableOpacity>
+          {preferences.selectedRecipes.length > 0 && (
+            <View style={styles.selectedRecipesList}>
+              {userRecipes
+                .filter(recipe => preferences.selectedRecipes.includes(recipe.id))
+                .map(recipe => (
+                  <View key={recipe.id} style={styles.selectedRecipeItem}>
+                    <Text style={styles.selectedRecipeName}>{recipe.name}</Text>
+                    <TouchableOpacity
+                      onPress={() => toggleRecipeSelection(recipe.id)}
+                      style={styles.removeRecipeButton}
+                    >
+                      <Ionicons name="close-circle" size={20} color="#FF4B4B" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+            </View>
+          )}
+        </View>
+
         {/* Action Buttons */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity
@@ -991,6 +1153,8 @@ Return ONLY a strictly valid JSON response formatted exactly like this:
         {/* Results Card */}
         <ResultsCard />
       </ScrollView>
+
+      <RecipeSelectorModal />
     </View>
   );
 }
@@ -1223,5 +1387,91 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#2E7D32',
     marginTop: 4,
+  },
+  recipeSelectorButton: {
+    backgroundColor: '#F0F0F0',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  recipeSelectorButtonText: {
+    fontSize: 16,
+    color: '#4A90E2',
+    fontWeight: '600',
+  },
+  selectedRecipesList: {
+    marginTop: 8,
+  },
+  selectedRecipeItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: '#F8F8F8',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  selectedRecipeName: {
+    fontSize: 14,
+    color: '#333',
+  },
+  removeRecipeButton: {
+    padding: 4,
+  },
+  selectedRecipeCard: {
+    borderColor: '#4A90E2',
+    borderWidth: 2,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#333',
+  },
+  modalContent: {
+    padding: 16,
+  },
+  recipeCard: {
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  recipeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  recipeTitleContainer: {
+    flex: 1,
+  },
+  modalRecipeName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  modalRecipeCuisine: {
+    fontSize: 14,
+    color: '#555',
+  },
+  recipeDetails: {
+    marginTop: 8,
+  },
+  detailText: {
+    fontSize: 14,
+    color: '#555',
+    marginBottom: 4,
   },
 }); 
