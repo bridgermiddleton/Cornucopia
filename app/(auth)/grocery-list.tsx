@@ -164,7 +164,12 @@ interface WizardState {
     cuisines: string[];
     dietaryRestrictions: string[];
     portionSize: number;
-    mealsPerWeek: number;
+    selectedDays: string[];
+    selectedMealTypes: {
+      [day: string]: {
+        [mealType: string]: boolean;
+      };
+    };
   };
   selectedFridgeItems: string[];
   generatedRecipes: any[];
@@ -179,8 +184,9 @@ export default function GroceryListScreen() {
       budget: '',
       cuisines: [],
       dietaryRestrictions: [],
-      portionSize: 4,
-      mealsPerWeek: 7,
+      portionSize: 2,
+      selectedDays: [],
+      selectedMealTypes: {},
     },
     selectedFridgeItems: [],
     generatedRecipes: [],

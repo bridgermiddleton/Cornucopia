@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,22 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+interface MealTypeSelection {
+  [mealType: string]: boolean;
+}
+
+interface DayMealTypes {
+  [day: string]: MealTypeSelection;
+}
+
 interface PreferencesStepProps {
   preferences: {
     budget: string;
     cuisines: string[];
     dietaryRestrictions: string[];
     portionSize: number;
-    mealsPerWeek: number;
+    selectedDays: string[];
+    selectedMealTypes: DayMealTypes;
   };
   onUpdate: (preferences: Partial<PreferencesStepProps['preferences']>) => void;
   onNext: () => void;
@@ -32,7 +41,23 @@ const DIETARY_RESTRICTIONS = [
   'Keto', 'Paleo', 'Low-Carb', 'Halal', 'Kosher'
 ];
 
-export default function PreferencesStep({ preferences, onUpdate, onNext }: PreferencesStepProps) {
+const DAYS = [
+  { id: 'SUN', label: 'S' },
+  { id: 'MON', label: 'M' },
+  { id: 'TUE', label: 'T' },
+  { id: 'WED', label: 'W' },
+  { id: 'THU', label: 'T' },
+  { id: 'FRI', label: 'F' },
+  { id: 'SAT', label: 'S' },
+];
+
+const MEAL_TYPES = ['Breakfast', 'Lunch', 'Dinner'];
+
+export default function PreferencesStep({
+  preferences,
+  onUpdate,
+  onNext,
+}: PreferencesStepProps) {
   console.log('PreferencesStep props:', { preferences, onUpdate, onNext });
   
   const toggleCuisine = (cuisine: string) => {
@@ -55,57 +80,110 @@ export default function PreferencesStep({ preferences, onUpdate, onNext }: Prefe
     onUpdate({ portionSize: Math.max(1, size) });
   };
 
-  const updateMealsPerWeek = (value: string) => {
-    const meals = parseInt(value) || 7;
-    onUpdate({ mealsPerWeek: Math.min(Math.max(1, meals), 14) });
+  const toggleDay = (dayId: string) => {
+    const updatedDays = preferences.selectedDays.includes(dayId)
+      ? preferences.selectedDays.filter(d => d !== dayId)
+      : [...preferences.selectedDays, dayId];
+    
+    // Initialize meal types for new day
+    const updatedMealTypes = { ...preferences.selectedMealTypes };
+    if (!preferences.selectedDays.includes(dayId)) {
+      updatedMealTypes[dayId] = {
+        Breakfast: false,
+        Lunch: false,
+        Dinner: false,
+      };
+    } else {
+      delete updatedMealTypes[dayId];
+    }
+
+    onUpdate({
+      selectedDays: updatedDays,
+      selectedMealTypes: updatedMealTypes,
+    });
+  };
+
+  const toggleMealType = (day: string, mealType: string) => {
+    const updatedMealTypes = {
+      ...preferences.selectedMealTypes,
+      [day]: {
+        ...preferences.selectedMealTypes[day],
+        [mealType]: !preferences.selectedMealTypes[day]?.[mealType],
+      },
+    };
+    onUpdate({ selectedMealTypes: updatedMealTypes });
   };
 
   return (
     <ScrollView style={styles.container}>
-      {/* Budget Section */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Weekly Budget</Text>
-        <View style={styles.budgetContainer}>
-          <Text style={styles.currencySymbol}>$</Text>
-          <TextInput
-            style={styles.budgetInput}
-            placeholder="Enter your budget"
-            value={preferences.budget}
-            onChangeText={(text) => onUpdate({ budget: text })}
-            keyboardType="numeric"
-          />
+        <Text style={styles.sectionTitle}>Select Days</Text>
+        <View style={styles.daysContainer}>
+          {DAYS.map((day) => (
+            <TouchableOpacity
+              key={day.id}
+              style={[
+                styles.dayCircle,
+                preferences.selectedDays.includes(day.id) && styles.dayCircleSelected,
+              ]}
+              onPress={() => toggleDay(day.id)}
+            >
+              <Text
+                style={[
+                  styles.dayText,
+                  preferences.selectedDays.includes(day.id) && styles.dayTextSelected,
+                ]}
+              >
+                {day.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
-      {/* Portion Size Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Portion Size</Text>
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Number of people</Text>
-          <TextInput
-            style={styles.numberInput}
-            value={preferences.portionSize.toString()}
-            onChangeText={updatePortionSize}
-            keyboardType="numeric"
-          />
+      {preferences.selectedDays.length > 0 && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Select Meals for Each Day</Text>
+          {preferences.selectedDays.map((day) => (
+            <View key={day} style={styles.mealTypeContainer}>
+              <Text style={styles.dayTitle}>{day}</Text>
+              <View style={styles.mealTypesRow}>
+                {MEAL_TYPES.map((mealType) => (
+                  <TouchableOpacity
+                    key={mealType}
+                    style={[
+                      styles.mealTypeButton,
+                      preferences.selectedMealTypes[day]?.[mealType] && styles.mealTypeButtonSelected,
+                    ]}
+                    onPress={() => toggleMealType(day, mealType)}
+                  >
+                    <Text
+                      style={[
+                        styles.mealTypeText,
+                        preferences.selectedMealTypes[day]?.[mealType] && styles.mealTypeTextSelected,
+                      ]}
+                    >
+                      {mealType}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          ))}
         </View>
+      )}
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Budget</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter your weekly budget"
+          value={preferences.budget}
+          onChangeText={(value) => onUpdate({ budget: value })}
+          keyboardType="numeric"
+        />
       </View>
 
-      {/* Meals Per Week Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Meals Per Week</Text>
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Number of meals (1-14)</Text>
-          <TextInput
-            style={styles.numberInput}
-            value={preferences.mealsPerWeek.toString()}
-            onChangeText={updateMealsPerWeek}
-            keyboardType="numeric"
-          />
-        </View>
-      </View>
-
-      {/* Cuisines Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Preferred Cuisines</Text>
         <View style={styles.optionsGrid}>
@@ -129,7 +207,6 @@ export default function PreferencesStep({ preferences, onUpdate, onNext }: Prefe
         </View>
       </View>
 
-      {/* Dietary Restrictions Section */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Dietary Restrictions</Text>
         <View style={styles.optionsGrid}>
@@ -153,11 +230,26 @@ export default function PreferencesStep({ preferences, onUpdate, onNext }: Prefe
         </View>
       </View>
 
-      {/* Next Button */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Portion Size</Text>
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Number of people</Text>
+          <TextInput
+            style={styles.numberInput}
+            value={preferences.portionSize.toString()}
+            onChangeText={updatePortionSize}
+            keyboardType="numeric"
+          />
+        </View>
+      </View>
+
       <TouchableOpacity
-        style={styles.nextButton}
+        style={[
+          styles.nextButton,
+          (!preferences.selectedDays.length || !preferences.budget) && styles.nextButtonDisabled,
+        ]}
         onPress={onNext}
-        disabled={!preferences.budget || preferences.cuisines.length === 0}
+        disabled={!preferences.selectedDays.length || !preferences.budget}
       >
         <Text style={styles.nextButtonText}>Next</Text>
         <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
@@ -188,24 +280,64 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 16,
   },
-  budgetContainer: {
+  daysContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+  },
+  dayCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#E0E0E0',
-    borderRadius: 8,
-    paddingHorizontal: 16,
   },
-  currencySymbol: {
-    fontSize: 20,
-    color: '#333',
-    marginRight: 8,
+  dayCircleSelected: {
+    backgroundColor: '#4A90E2',
+    borderColor: '#4A90E2',
   },
-  budgetInput: {
-    flex: 1,
-    height: 50,
+  dayText: {
     fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
+  },
+  dayTextSelected: {
+    color: '#FFFFFF',
+  },
+  mealTypeContainer: {
+    marginBottom: 16,
+  },
+  dayTitle: {
+    fontSize: 16,
+    fontWeight: '600',
     color: '#333',
+    marginBottom: 8,
+  },
+  mealTypesRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  mealTypeButton: {
+    flex: 1,
+    padding: 12,
+    backgroundColor: '#F0F0F0',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  mealTypeButtonSelected: {
+    backgroundColor: '#4A90E2',
+  },
+  mealTypeText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  mealTypeTextSelected: {
+    color: '#FFFFFF',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -251,6 +383,14 @@ const styles = StyleSheet.create({
   optionChipTextSelected: {
     color: '#FFFFFF',
   },
+  input: {
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    fontSize: 16,
+  },
   nextButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -264,6 +404,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
+  },
+  nextButtonDisabled: {
+    backgroundColor: '#B0B0B0',
   },
   nextButtonText: {
     color: '#FFFFFF',

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import firestore from '@react-native-firebase/firestore';
@@ -30,6 +31,8 @@ interface Recipe {
   cookTime: string;
   servings: number;
   difficulty: string;
+  day: string;
+  mealType: string;
 }
 
 interface FridgeItem {
@@ -47,7 +50,12 @@ interface RecipeGenerationStepProps {
     cuisines: string[];
     dietaryRestrictions: string[];
     portionSize: number;
-    mealsPerWeek: number;
+    selectedDays: string[];
+    selectedMealTypes: {
+      [day: string]: {
+        [mealType: string]: boolean;
+      };
+    };
   };
   selectedFridgeItems: string[];
   generatedRecipes: Recipe[];
@@ -69,6 +77,7 @@ export default function RecipeGenerationStep({
   onBack,
 }: RecipeGenerationStepProps) {
   const [loading, setLoading] = useState(false);
+  const [currentDayIndex, setCurrentDayIndex] = useState(0);
   const [showRecipeModal, setShowRecipeModal] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [userRecipes, setUserRecipes] = useState<Recipe[]>([]);
@@ -93,29 +102,40 @@ export default function RecipeGenerationStep({
           ...doc.data()
         })) as FridgeItem[];
 
-      // Load user's saved recipes
-      const recipesRef = firestore()
-        .collection('users')
-        .doc(currentUser.uid)
-        .collection('recipes');
+      // Track remaining quantities of fridge items
+      const remainingQuantities: { [key: string]: number } = {};
+      fridgeItems.forEach(item => {
+        remainingQuantities[item.name] = item.quantity;
+      });
 
-      const recipesSnapshot = await recipesRef.get();
-      const savedRecipes = recipesSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Recipe[];
+      // Generate recipes for each selected day and meal type
+      const allRecipes: Recipe[] = [];
+      
+      for (const day of preferences.selectedDays) {
+        const mealTypes = preferences.selectedMealTypes[day];
+        for (const [mealType, isSelected] of Object.entries(mealTypes)) {
+          if (isSelected) {
+            // Filter out items that have been completely used
+            const availableFridgeItems = fridgeItems.filter(item => 
+              remainingQuantities[item.name] > 0
+            );
 
-      setUserRecipes(savedRecipes);
+            const prompt = `Generate 1 recipe for ${mealType} that should try to use some of these available ingredients from the user's fridge (use them only if they make sense for the recipe):
+${availableFridgeItems.map(item => `- ${item.name} (${remainingQuantities[item.name]} ${item.unit} available)`).join('\n')}
 
-      // Generate prompt for OpenAI
-      const prompt = `Generate ${preferences.mealsPerWeek} recipes based on these preferences:
+Additional preferences:
 Budget: $${preferences.budget}
 Cuisines: ${preferences.cuisines.join(', ')}
 Dietary Restrictions: ${preferences.dietaryRestrictions.join(', ')}
 Portion Size: ${preferences.portionSize} people
-Available Fridge Items: ${fridgeItems.map(item => `${item.name} (${item.quantity} ${item.unit})`).join(', ')}
 
-Format the response as a valid JSON array of recipes. Each recipe should have this exact structure:
+IMPORTANT: 
+- Use fridge ingredients that make sense for the recipe, but don't force using them if they don't fit
+- When using a fridge ingredient, specify a reasonable amount that doesn't exceed what's available
+- Mark fridge ingredients with "source": "fridge" in the JSON
+- The amounts should be appropriate for ${preferences.portionSize} people
+
+Return a JSON object with this structure:
 {
   "name": "Recipe Name",
   "cuisine": "Cuisine Type",
@@ -124,50 +144,58 @@ Format the response as a valid JSON array of recipes. Each recipe should have th
       "item": "Ingredient Name",
       "amount": "Amount",
       "unit": "Unit",
-      "source": "grocery"
+      "source": "fridge" // Use "fridge" for ingredients from the fridge list, "grocery" for others
     }
   ],
   "instructions": "Step-by-step instructions",
   "prepTime": "30 minutes",
   "cookTime": "45 minutes",
-  "servings": 4,
+  "servings": ${preferences.portionSize},
   "difficulty": "Easy"
-}
+}`;
 
-Ensure the response is a valid JSON array starting with [ and ending with ]. Do not include any additional text or formatting.`;
+            const completion = await openai.chat.completions.create({
+              model: "gpt-4-turbo-preview",
+              messages: [
+                {
+                  role: "system",
+                  content: "You are a recipe generator that specializes in creating recipes using available ingredients when appropriate. You should incorporate ingredients from the user's fridge when they make sense for the recipe, but don't force their usage if they don't fit naturally. Return ONLY a valid JSON object."
+                },
+                {
+                  role: "user",
+                  content: prompt
+                }
+              ],
+              temperature: 0.7,
+              max_tokens: 1000,
+              response_format: { type: "json_object" }
+            });
 
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4-turbo-preview",
-        messages: [
-          {
-            role: "system",
-            content: "You are a recipe generator that returns only valid JSON arrays. Always verify the JSON is valid before responding."
-          },
-          {
-            role: "user",
-            content: prompt
+            if (completion.choices[0]?.message?.content) {
+              const recipe = JSON.parse(completion.choices[0].message.content);
+              
+              // Update remaining quantities for used fridge items
+              recipe.ingredients.forEach((ing: { item: string; amount: string; unit: string; source: string }) => {
+                if (ing.source === "fridge") {
+                  const amount = parseFloat(ing.amount);
+                  if (!isNaN(amount) && remainingQuantities[ing.item]) {
+                    remainingQuantities[ing.item] = Math.max(0, remainingQuantities[ing.item] - amount);
+                  }
+                }
+              });
+
+              allRecipes.push({
+                ...recipe,
+                id: `${day}-${mealType}`,
+                day,
+                mealType
+              });
+            }
           }
-        ],
-        temperature: 0.7,
-        max_tokens: 2000,
-        response_format: { type: "json_object" }
-      });
-
-      if (!completion.choices[0]?.message?.content) {
-        throw new Error('No response from OpenAI');
+        }
       }
 
-      let content = completion.choices[0].message.content;
-      
-      // Ensure the content is wrapped in an array if it's not already
-      try {
-        const parsed = JSON.parse(content);
-        const recipes = Array.isArray(parsed) ? parsed : parsed.recipes || [parsed];
-        onUpdate(recipes);
-      } catch (parseError) {
-        console.error('JSON Parse error:', parseError);
-        throw new Error('Failed to parse recipe data');
-      }
+      onUpdate(allRecipes);
     } catch (error) {
       console.error('Error generating recipes:', error);
       Alert.alert('Error', 'Failed to generate recipes. Please try again.');
@@ -176,41 +204,66 @@ Ensure the response is a valid JSON array starting with [ and ending with ]. Do 
     }
   };
 
-  const regenerateRecipe = async (index: number) => {
+  const regenerateRecipe = async (day: string, mealType: string) => {
     setLoading(true);
     try {
-      // Generate a single recipe replacement
-      const prompt = `Generate 1 recipe based on the following preferences:
-      Budget: $${preferences.budget}
-      Cuisines: ${preferences.cuisines.join(', ')}
-      Dietary Restrictions: ${preferences.dietaryRestrictions.join(', ')}
-      Portion Size: ${preferences.portionSize} people
-      
-      Return a JSON object with this structure:
-      {
-        "name": "Recipe name",
-        "cuisine": "Cuisine type",
-        "ingredients": [
-          {
-            "item": "Ingredient name",
-            "amount": "Amount needed",
-            "unit": "Unit of measurement",
-            "source": "grocery"
-          }
-        ],
-        "instructions": "Step-by-step instructions",
-        "prepTime": "Preparation time",
-        "cookTime": "Cooking time",
-        "servings": number,
-        "difficulty": "Easy/Medium/Hard"
-      }`;
+      // Get current fridge items
+      const currentUser = auth().currentUser;
+      if (!currentUser) return;
+
+      const fridgeRef = firestore()
+        .collection('users')
+        .doc(currentUser.uid)
+        .collection('fridgeItems');
+
+      const fridgeSnapshot = await fridgeRef.get();
+      const fridgeItems = fridgeSnapshot.docs
+        .filter(doc => selectedFridgeItems.includes(doc.id))
+        .map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as FridgeItem[];
+
+      const prompt = `Generate 1 recipe for ${mealType} that should try to use some of these available ingredients from the user's fridge (use them only if they make sense for the recipe):
+${fridgeItems.map(item => `- ${item.name} (${item.quantity} ${item.unit} available)`).join('\n')}
+
+Additional preferences:
+Budget: $${preferences.budget}
+Cuisines: ${preferences.cuisines.join(', ')}
+Dietary Restrictions: ${preferences.dietaryRestrictions.join(', ')}
+Portion Size: ${preferences.portionSize} people
+
+IMPORTANT: 
+- Use fridge ingredients that make sense for the recipe, but don't force using them if they don't fit
+- When using a fridge ingredient, specify a reasonable amount that doesn't exceed what's available
+- Mark fridge ingredients with "source": "fridge" in the JSON
+- The amounts should be appropriate for ${preferences.portionSize} people
+
+Return a JSON object with this structure:
+{
+  "name": "Recipe Name",
+  "cuisine": "Cuisine Type",
+  "ingredients": [
+    {
+      "item": "Ingredient Name",
+      "amount": "Amount",
+      "unit": "Unit",
+      "source": "fridge" // Use "fridge" for ingredients from the fridge list, "grocery" for others
+    }
+  ],
+  "instructions": "Step-by-step instructions",
+  "prepTime": "30 minutes",
+  "cookTime": "45 minutes",
+  "servings": ${preferences.portionSize},
+  "difficulty": "Easy"
+}`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4-turbo-preview",
         messages: [
           {
             role: "system",
-            content: "You are a recipe generator. Return ONLY a valid JSON object."
+            content: "You are a recipe generator that specializes in creating recipes using available ingredients when appropriate. You should incorporate ingredients from the user's fridge when they make sense for the recipe, but don't force their usage if they don't fit naturally. Return ONLY a valid JSON object."
           },
           {
             role: "user",
@@ -218,17 +271,19 @@ Ensure the response is a valid JSON array starting with [ and ending with ]. Do 
           }
         ],
         temperature: 0.7,
-        max_tokens: 1000
+        max_tokens: 1000,
+        response_format: { type: "json_object" }
       });
 
-      if (!completion.choices[0]?.message?.content) {
-        throw new Error('No response from OpenAI');
+      if (completion.choices[0]?.message?.content) {
+        const newRecipe = JSON.parse(completion.choices[0].message.content);
+        const updatedRecipes = generatedRecipes.map(recipe => 
+          recipe.day === day && recipe.mealType === mealType
+            ? { ...newRecipe, id: `${day}-${mealType}`, day, mealType }
+            : recipe
+        );
+        onUpdate(updatedRecipes);
       }
-
-      const newRecipe = JSON.parse(completion.choices[0].message.content);
-      const updatedRecipes = [...generatedRecipes];
-      updatedRecipes[index] = newRecipe;
-      onUpdate(updatedRecipes);
     } catch (error) {
       console.error('Error regenerating recipe:', error);
       Alert.alert('Error', 'Failed to regenerate recipe. Please try again.');
@@ -237,144 +292,110 @@ Ensure the response is a valid JSON array starting with [ and ending with ]. Do 
     }
   };
 
-  const replaceWithSavedRecipe = (index: number, recipe: Recipe) => {
-    const updatedRecipes = [...generatedRecipes];
-    updatedRecipes[index] = recipe;
-    onUpdate(updatedRecipes);
-    setShowRecipeModal(false);
+  const navigateDay = (direction: 'next' | 'prev') => {
+    if (direction === 'next') {
+      setCurrentDayIndex(prev => 
+        prev < preferences.selectedDays.length - 1 ? prev + 1 : prev
+      );
+    } else {
+      setCurrentDayIndex(prev => prev > 0 ? prev - 1 : prev);
+    }
   };
 
-  const RecipeModal = () => (
-    <Modal
-      visible={showRecipeModal}
-      animationType="slide"
-      onRequestClose={() => setShowRecipeModal(false)}
-    >
-      <View style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Select a Recipe</Text>
-          <TouchableOpacity
-            onPress={() => setShowRecipeModal(false)}
-            style={styles.closeButton}
-          >
-            <Ionicons name="close" size={24} color="#333" />
-          </TouchableOpacity>
-        </View>
+  const getCurrentDayRecipes = () => {
+    const currentDay = preferences.selectedDays[currentDayIndex];
+    return generatedRecipes.filter(recipe => recipe.day === currentDay);
+  };
 
-        <ScrollView style={styles.modalContent}>
-          {userRecipes.map((recipe) => (
-            <TouchableOpacity
-              key={recipe.id}
-              style={styles.recipeCard}
-              onPress={() => replaceWithSavedRecipe(generatedRecipes.indexOf(selectedRecipe!), recipe)}
-            >
-              <View style={styles.recipeHeader}>
-                <View style={styles.recipeTitleContainer}>
-                  <Text style={styles.modalRecipeName}>{recipe.name}</Text>
-                  <Text style={styles.modalRecipeCuisine}>{recipe.cuisine}</Text>
-                </View>
-              </View>
-
-              <View style={styles.recipeDetails}>
-                <Text style={styles.detailText}>
-                  <Ionicons name="time-outline" size={16} color="#666" /> {recipe.prepTime} prep
-                </Text>
-                <Text style={styles.detailText}>
-                  <Ionicons name="flame-outline" size={16} color="#666" /> {recipe.cookTime} cook
-                </Text>
-                <Text style={styles.detailText}>
-                  <Ionicons name="people-outline" size={16} color="#666" /> {recipe.servings} servings
-                </Text>
-                <Text style={styles.detailText}>
-                  <Ionicons name="speedometer-outline" size={16} color="#666" /> {recipe.difficulty}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-    </Modal>
-  );
+  const getDayName = (dayId: string) => {
+    const days: { [key: string]: string } = {
+      'SUN': 'Sunday',
+      'MON': 'Monday',
+      'TUE': 'Tuesday',
+      'WED': 'Wednesday',
+      'THU': 'Thursday',
+      'FRI': 'Friday',
+      'SAT': 'Saturday'
+    };
+    return days[dayId] || dayId;
+  };
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.header}>
-        {generatedRecipes.length === 0
-          ? 'Generate recipes based on your preferences'
-          : 'Review and customize your meal plan'}
-      </Text>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>
+          {(generatedRecipes || []).length === 0 ? 'Generate Your Meal Plan' : 'Your Meal Plan'}
+        </Text>
+        <Text style={styles.subtitle}>
+          {(generatedRecipes || []).length === 0 
+            ? 'Click generate to create your personalized meal plan'
+            : 'Review and customize your meals'
+          }
+        </Text>
+      </View>
 
-      {generatedRecipes.length === 0 ? (
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4CAF50" />
+          <Text style={styles.loadingText}>Generating your meal plan...</Text>
+        </View>
+      ) : (generatedRecipes || []).length === 0 ? (
         <TouchableOpacity
           style={styles.generateButton}
           onPress={generateRecipes}
           disabled={loading}
         >
-          {loading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <>
-              <Text style={styles.generateButtonText}>Generate Recipes</Text>
-              <Ionicons name="restaurant-outline" size={24} color="#FFFFFF" />
-            </>
-          )}
+          <Text style={styles.generateButtonText}>Generate Meal Plan</Text>
+          <Ionicons name="restaurant-outline" size={24} color="#FFFFFF" />
         </TouchableOpacity>
       ) : (
-        <>
-          {generatedRecipes.map((recipe, index) => (
-            <View key={index} style={styles.recipeCard}>
-              <View style={styles.recipeHeader}>
-                <View style={styles.recipeTitleContainer}>
-                  <Text style={styles.recipeName}>{recipe.name}</Text>
-                  <Text style={styles.recipeCuisine}>{recipe.cuisine}</Text>
-                </View>
-                <View style={styles.recipeActions}>
+        <View style={styles.cardContainer}>
+          <View style={styles.dayCard}>
+            <Text style={styles.dayTitle}>
+              {getDayName(preferences.selectedDays[currentDayIndex])}
+            </Text>
+            
+            {getCurrentDayRecipes().map((recipe) => (
+              <View key={recipe.id} style={styles.mealContainer}>
+                <Text style={styles.mealType}>{recipe.mealType}</Text>
+                <View style={styles.recipeRow}>
+                  <View style={styles.recipeInfo}>
+                    <Text style={styles.recipeName}>{recipe.name}</Text>
+                    <Text style={styles.recipeCuisine}>{recipe.cuisine}</Text>
+                  </View>
                   <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => {
-                      setSelectedRecipe(recipe);
-                      setShowRecipeModal(true);
-                    }}
-                  >
-                    <Ionicons name="swap-horizontal-outline" size={20} color="#4A90E2" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => regenerateRecipe(index)}
-                    disabled={loading}
+                    style={styles.regenerateButton}
+                    onPress={() => regenerateRecipe(recipe.day, recipe.mealType)}
                   >
                     <Ionicons name="refresh-outline" size={20} color="#4A90E2" />
                   </TouchableOpacity>
                 </View>
               </View>
+            ))}
 
-              <View style={styles.recipeDetails}>
-                <Text style={styles.detailText}>
-                  <Ionicons name="time-outline" size={16} color="#666" /> {recipe.prepTime} prep
-                </Text>
-                <Text style={styles.detailText}>
-                  <Ionicons name="flame-outline" size={16} color="#666" /> {recipe.cookTime} cook
-                </Text>
-                <Text style={styles.detailText}>
-                  <Ionicons name="people-outline" size={16} color="#666" /> {recipe.servings} servings
-                </Text>
-                <Text style={styles.detailText}>
-                  <Ionicons name="speedometer-outline" size={16} color="#666" /> {recipe.difficulty}
-                </Text>
-              </View>
-
-              <Text style={styles.ingredientsTitle}>Ingredients:</Text>
-              {recipe.ingredients.map((ingredient, ingIndex) => (
-                <Text key={ingIndex} style={styles.ingredientItem}>
-                  • {ingredient.amount} {ingredient.unit} {ingredient.item}
-                  {ingredient.source === "fridge" ? " (from fridge)" : ""}
-                </Text>
-              ))}
-
-              <Text style={styles.instructionsTitle}>Instructions:</Text>
-              <Text style={styles.instructions}>{recipe.instructions}</Text>
+            <View style={styles.navigationContainer}>
+              <TouchableOpacity
+                style={[styles.navButton, currentDayIndex === 0 && styles.navButtonDisabled]}
+                onPress={() => navigateDay('prev')}
+                disabled={currentDayIndex === 0}
+              >
+                <Ionicons name="arrow-back" size={24} color={currentDayIndex === 0 ? '#999' : '#333'} />
+              </TouchableOpacity>
+              <Text style={styles.pageIndicator}>
+                {currentDayIndex + 1} / {preferences.selectedDays.length}
+              </Text>
+              <TouchableOpacity
+                style={[
+                  styles.navButton,
+                  currentDayIndex === preferences.selectedDays.length - 1 && styles.navButtonDisabled
+                ]}
+                onPress={() => navigateDay('next')}
+                disabled={currentDayIndex === preferences.selectedDays.length - 1}
+              >
+                <Ionicons name="arrow-forward" size={24} color={currentDayIndex === preferences.selectedDays.length - 1 ? '#999' : '#333'} />
+              </TouchableOpacity>
             </View>
-          ))}
+          </View>
 
           <View style={styles.buttonContainer}>
             <TouchableOpacity
@@ -393,11 +414,9 @@ Ensure the response is a valid JSON array starting with [ and ending with ]. Do 
               <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
-        </>
+        </View>
       )}
-
-      <RecipeModal />
-    </ScrollView>
+    </View>
   );
 }
 
@@ -407,17 +426,110 @@ const styles = StyleSheet.create({
     backgroundColor: '#F5F5F5',
   },
   header: {
+    padding: 16,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 8,
+  },
+  subtitle: {
     fontSize: 16,
     color: '#666',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 16,
+  },
+  cardContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  dayCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    minHeight: 400,
+  },
+  dayTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 24,
     textAlign: 'center',
-    margin: 16,
-    paddingHorizontal: 16,
+  },
+  mealContainer: {
+    marginBottom: 24,
+  },
+  mealType: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+  },
+  recipeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F8F8F8',
+    padding: 16,
+    borderRadius: 12,
+  },
+  recipeInfo: {
+    flex: 1,
+  },
+  recipeName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  recipeCuisine: {
+    fontSize: 14,
+    color: '#666',
+  },
+  regenerateButton: {
+    padding: 8,
+    backgroundColor: '#F0F0F0',
+    borderRadius: 20,
+  },
+  navigationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 24,
+  },
+  navButton: {
+    padding: 12,
+    backgroundColor: '#F0F0F0',
+    borderRadius: 25,
+  },
+  navButtonDisabled: {
+    opacity: 0.5,
+  },
+  pageIndicator: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#666',
   },
   generateButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#4A90E2',
+    backgroundColor: '#4CAF50',
     margin: 16,
     padding: 16,
     borderRadius: 25,
@@ -429,85 +541,14 @@ const styles = StyleSheet.create({
   },
   generateButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    marginRight: 8,
-  },
-  recipeCard: {
-    backgroundColor: '#FFFFFF',
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  recipeHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  recipeTitleContainer: {
-    flex: 1,
-  },
-  recipeName: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  recipeCuisine: {
-    fontSize: 14,
-    color: '#666',
-  },
-  recipeActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionButton: {
-    padding: 4,
-  },
-  recipeDetails: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginBottom: 16,
-  },
-  detailText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  ingredientsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  ingredientItem: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  instructionsTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginTop: 12,
-    marginBottom: 8,
-  },
-  instructions: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
+    marginRight: 12,
   },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    padding: 16,
-    marginTop: 16,
+    marginTop: 24,
   },
   button: {
     flexDirection: 'row',
@@ -536,38 +577,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginRight: 8,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#333',
-  },
-  closeButton: {
-    padding: 4,
-  },
-  modalContent: {
-    padding: 16,
-  },
-  modalRecipeName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  modalRecipeCuisine: {
-    fontSize: 14,
-    color: '#666',
   },
 }); 
