@@ -7,7 +7,7 @@ podfile_properties = JSON.parse(File.read(File.join(__dir__, 'Podfile.properties
 ENV['RCT_NEW_ARCH_ENABLED'] = podfile_properties['newArchEnabled'] == 'true' ? '1' : '0'
 ENV['EX_DEV_CLIENT_NETWORK_INSPECTOR'] = podfile_properties['EX_DEV_CLIENT_NETWORK_INSPECTOR']
 
-platform :ios, podfile_properties['ios.deploymentTarget'] || '15.1'
+platform :ios, podfile_properties['ios.deploymentTarget'] || '16.0'
 install! 'cocoapods',
   :deterministic_uuids => false
 
@@ -55,14 +55,63 @@ target 'Cornucopia' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => podfile_properties['apple.ccacheEnabled'] == 'true',
     )
-
-    # This is necessary for Xcode 14, because it signs resource bundles by default
-    # when building for devices.
-    installer.target_installation_results.pod_target_installation_results
-      .each do |pod_name, target_installation_result|
+  
+    # Disable code signing for resource bundles (Xcode 14 workaround)
+    installer.target_installation_results.pod_target_installation_results.each do |pod_name, target_installation_result|
       target_installation_result.resource_bundle_targets.each do |resource_bundle_target|
         resource_bundle_target.build_configurations.each do |config|
           config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+        end
+      end
+    end
+  
+    # Remove unsupported '-G' flag from both OTHER_CFLAGS and OTHER_CPLUSPLUSFLAGS for BoringSSL-GRPC
+    installer.pods_project.targets.each do |target|
+      if target.name == 'BoringSSL-GRPC'
+        target.source_build_phase.files.each do |file|
+          if file.settings && file.settings['COMPILER_FLAGS']
+            flags = file.settings['COMPILER_FLAGS'].split
+            flags.reject! { |flag| flag == '-GCC_WARN_INHIBIT_ALL_WARNINGS' }
+            file.settings['COMPILER_FLAGS'] = flags.join(' ')
+          end
+        end
+      end
+    end
+  
+    # Force gRPC-related pods to use C++14 (which supports std::result_of)
+    installer.pods_project.targets.each do |target|
+      if target.name.include?('gRPC')
+        target.build_configurations.each do |config|
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++14'
+          config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+        end
+      end
+    end
+  
+    # Workaround: Configure abseil to use gnu++14 language standard for cocoapods 1.16+ compatibility.
+    # Remove workaround when upstream issue is fixed:
+    # https://github.com/firebase/firebase-ios-sdk/issues/13996
+    installer.pods_project.targets.each do |target|
+      if target.name == 'abseil'
+        Pod::UI.puts "Workaround: Configuring abseil to use gnu++14 language standard for cocoapods 1.16+ compatibility".yellow
+        Pod::UI.puts "            Remove workaround when upstream issue fixed https://github.com/firebase/firebase-ios-sdk/issues/13996".yellow
+        target.build_configurations.each do |config|
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++14'
+          config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+          config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
+          config.build_settings['ENABLE_BITCODE'] = 'NO'
+        end
+      end
+    end
+
+    # Additional configuration for Firebase-related targets
+    installer.pods_project.targets.each do |target|
+      if target.name.include?('Firebase') || target.name.include?('Firestore')
+        target.build_configurations.each do |config|
+          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++14'
+          config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
+          config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
+          config.build_settings['ENABLE_BITCODE'] = 'NO'
         end
       end
     end
