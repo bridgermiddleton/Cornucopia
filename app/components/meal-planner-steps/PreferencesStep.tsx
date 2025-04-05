@@ -19,7 +19,6 @@ interface DayMealTypes {
 
 interface PreferencesStepProps {
   preferences: {
-    budget: string;
     cuisines: string[];
     dietaryRestrictions: string[];
     portionSize: number;
@@ -174,17 +173,6 @@ export default function PreferencesStep({
       )}
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Budget</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter your weekly budget"
-          value={preferences.budget}
-          onChangeText={(value) => onUpdate({ budget: value })}
-          keyboardType="numeric"
-        />
-      </View>
-
-      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Preferred Cuisines</Text>
         <View style={styles.optionsGrid}>
           {CUISINES.map((cuisine) => (
@@ -246,10 +234,10 @@ export default function PreferencesStep({
       <TouchableOpacity
         style={[
           styles.nextButton,
-          (!preferences.selectedDays.length || !preferences.budget) && styles.nextButtonDisabled,
+          !preferences.selectedDays.length && styles.nextButtonDisabled,
         ]}
         onPress={onNext}
-        disabled={!preferences.selectedDays.length || !preferences.budget}
+        disabled={!preferences.selectedDays.length}
       >
         <Text style={styles.nextButtonText}>Next</Text>
         <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />

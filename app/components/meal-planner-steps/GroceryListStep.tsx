@@ -7,8 +7,11 @@ import {
   ScrollView,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 import OpenAI from 'openai';
 import keys from '../../config/keys';
 
@@ -23,10 +26,6 @@ interface Recipe {
     source: 'grocery' | 'fridge';
   }[];
   instructions: string;
-  prepTime: string;
-  cookTime: string;
-  servings: number;
-  difficulty: string;
 }
 
 interface GroceryItem {
@@ -43,6 +42,18 @@ interface GroceryListStepProps {
   groceryList: GroceryItem[];
   onUpdate: (list: GroceryItem[]) => void;
   onBack: () => void;
+}
+
+interface UserPreferences {
+  preferredStore?: {
+    id: string;
+    name: string;
+    address: string;
+    location?: {
+      lat: number;
+      lng: number;
+    };
+  };
 }
 
 const openai = new OpenAI({
@@ -67,25 +78,62 @@ export default function GroceryListStep({
   onBack,
 }: GroceryListStepProps) {
   const [loading, setLoading] = useState(false);
-  const [newItem, setNewItem] = useState<Partial<GroceryItem>>({
-    name: '',
-    quantity: '',
-    unit: '',
-    category: 'Other',
-    estimatedPrice: '',
-  });
-  const [showAddItem, setShowAddItem] = useState(false);
+  const [budget, setBudget] = useState<string>('');
+  const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
+  const [totalCost, setTotalCost] = useState<number>(0);
 
   useEffect(() => {
-    if (groceryList.length === 0) {
-      generateGroceryList();
-    }
+    loadUserPreferences();
   }, []);
 
+  useEffect(() => {
+    if (groceryList.length > 0) {
+      const total = groceryList.reduce((sum, item) => {
+        const price = parseFloat(item.estimatedPrice.replace('$', ''));
+        return sum + (isNaN(price) ? 0 : price);
+      }, 0);
+      setTotalCost(total);
+    }
+  }, [groceryList]);
+
+  const loadUserPreferences = async () => {
+    try {
+      const currentUser = auth().currentUser;
+      if (!currentUser) return;
+
+      const userDoc = await firestore()
+        .collection('users')
+        .doc(currentUser.uid)
+        .get();
+
+      if (userDoc.exists) {
+        const preferences = userDoc.data()?.preferences || {};
+        setUserPreferences(preferences);
+      }
+    } catch (error) {
+      console.error('Error loading preferences:', error);
+    }
+  };
+
   const generateGroceryList = async () => {
+    if (!budget) {
+      Alert.alert('Error', 'Please set your budget before generating the grocery list');
+      return;
+    }
+
     setLoading(true);
     try {
-      const prompt = `Generate a grocery list based on these recipes:
+      const storeInfo = userPreferences?.preferredStore 
+        ? `Store: ${userPreferences.preferredStore.name}, ${userPreferences.preferredStore.address}`
+        : 'No specific store selected';
+
+      const prompt = `Generate a grocery list based on these recipes, staying within a budget of $${budget}. 
+      IMPORTANT: Return ONLY a valid JSON array of grocery items. Do not include any markdown formatting or backticks.
+      
+      Store Information:
+      ${storeInfo}
+      
+      Recipes:
       ${generatedRecipes.map(recipe => `
         ${recipe.name}:
         ${recipe.ingredients
@@ -94,22 +142,38 @@ export default function GroceryListStep({
           .join('\n')}
       `).join('\n\n')}
       
-      Return a JSON array of grocery items with this structure:
-      {
-        "name": "Item name",
-        "quantity": "Quantity needed",
-        "unit": "Unit of measurement",
-        "category": "Store category",
-        "estimatedPrice": "$X.XX",
-        "note": "Optional note"
-      }`;
+      Instructions:
+      1. Convert ingredient amounts to standard store packaging sizes
+      2. For example:
+         - Salt should be a container (e.g., "1 container" or "1 box")
+         - Hamburger buns should be a package (e.g., "1 package" or "8 count")
+         - Spices should be in standard spice jar sizes
+         - Fresh produce should be in standard store quantities (e.g., "1 bunch" for herbs)
+      3. Consider the store's typical packaging sizes
+      4. Round up quantities to the nearest standard package size
+      5. Include notes for any special packaging considerations
+      
+      Required JSON structure:
+      [
+        {
+          "name": "Item name",
+          "quantity": "Standard store quantity (e.g., '1 package', '1 container')",
+          "unit": "Standard unit (e.g., 'package', 'container', 'count')",
+          "category": "Store category",
+          "estimatedPrice": "$X.XX",
+          "note": "Optional note about packaging or quantity"
+        }
+      ]`;
+
+      console.log('Generated Recipes:', generatedRecipes);
+      console.log('Prompt:', prompt);
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4-turbo-preview",
         messages: [
           {
             role: "system",
-            content: "You are a grocery list generator. Return ONLY a valid JSON array of grocery items."
+            content: "You are a grocery list generator that understands standard store packaging sizes. Convert recipe ingredient amounts to standard store packaging quantities. Return ONLY a valid JSON array of grocery items. Do not include any markdown formatting, backticks, or additional text."
           },
           {
             role: "user",
@@ -124,7 +188,29 @@ export default function GroceryListStep({
         throw new Error('No response from OpenAI');
       }
 
-      const items = JSON.parse(completion.choices[0].message.content);
+      console.log('Raw response:', completion.choices[0].message.content);
+
+      // Clean the response to ensure it's valid JSON
+      const cleanedResponse = completion.choices[0].message.content
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '')
+        .trim();
+
+      console.log('Cleaned response:', cleanedResponse);
+
+      let items;
+      try {
+        items = JSON.parse(cleanedResponse);
+      } catch (parseError) {
+        console.error('JSON Parse Error:', parseError);
+        throw new Error('Failed to parse the response as JSON');
+      }
+
+      if (!Array.isArray(items)) {
+        throw new Error('Response is not an array');
+      }
+
+      console.log('Parsed items:', items);
       onUpdate(items);
     } catch (error) {
       console.error('Error generating grocery list:', error);
@@ -134,104 +220,89 @@ export default function GroceryListStep({
     }
   };
 
-  const addItem = () => {
-    if (!newItem.name || !newItem.quantity || !newItem.unit || !newItem.estimatedPrice) {
-      Alert.alert('Error', 'Please fill in all required fields');
-      return;
-    }
-
-    const item: GroceryItem = {
-      name: newItem.name!,
-      quantity: newItem.quantity!,
-      unit: newItem.unit!,
-      category: newItem.category!,
-      estimatedPrice: newItem.estimatedPrice!,
-      note: newItem.note,
-    };
-
-    onUpdate([...groceryList, item]);
-    setNewItem({
-      name: '',
-      quantity: '',
-      unit: '',
-      category: 'Other',
-      estimatedPrice: '',
+  const groupItemsByCategory = () => {
+    const grouped: { [key: string]: GroceryItem[] } = {};
+    STORE_CATEGORIES.forEach(category => {
+      grouped[category] = [];
     });
-    setShowAddItem(false);
+
+    groceryList.forEach(item => {
+      const category = item.category || 'Other';
+      if (!grouped[category]) {
+        grouped[category] = [];
+      }
+      grouped[category].push(item);
+    });
+
+    return grouped;
   };
-
-  const removeItem = (index: number) => {
-    const updatedList = groceryList.filter((_, i) => i !== index);
-    onUpdate(updatedList);
-  };
-
-  const updateItem = (index: number, field: keyof GroceryItem, value: string) => {
-    const updatedList = [...groceryList];
-    updatedList[index] = {
-      ...updatedList[index],
-      [field]: value,
-    };
-    onUpdate(updatedList);
-  };
-
-  const groupedItems = STORE_CATEGORIES.reduce((acc, category) => {
-    acc[category] = groceryList.filter(item => item.category === category);
-    return acc;
-  }, {} as Record<string, GroceryItem[]>);
-
-  const totalCost = groceryList.reduce((sum, item) => {
-    const price = parseFloat(item.estimatedPrice.replace('$', ''));
-    return sum + price;
-  }, 0);
 
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.header}>
-        Review and customize your grocery list
+        Set your budget and generate your grocery list
       </Text>
 
-      {STORE_CATEGORIES.map(category => (
-        groupedItems[category].length > 0 && (
-          <View key={category} style={styles.categorySection}>
-            <Text style={styles.categoryTitle}>{category}</Text>
-            {groupedItems[category].map((item, index) => (
-              <View key={index} style={styles.itemCard}>
-                <View style={styles.itemInfo}>
-                  <Text style={styles.itemName}>{item.name}</Text>
-                  <Text style={styles.itemDetails}>
-                    {item.quantity} {item.unit}
-                  </Text>
-                  {item.note && (
-                    <Text style={styles.itemNote}>{item.note}</Text>
-                  )}
-                </View>
-                <View style={styles.itemActions}>
-                  <Text style={styles.itemPrice}>{item.estimatedPrice}</Text>
-                  <TouchableOpacity
-                    style={styles.removeButton}
-                    onPress={() => removeItem(groceryList.indexOf(item))}
-                  >
-                    <Ionicons name="trash-outline" size={20} color="#FF4B4B" />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </View>
-        )
-      ))}
+      {userPreferences?.preferredStore && (
+        <View style={styles.storeInfo}>
+          <Text style={styles.storeLabel}>Shopping at:</Text>
+          <Text style={styles.storeName}>{userPreferences.preferredStore.name}</Text>
+          <Text style={styles.storeAddress}>{userPreferences.preferredStore.address}</Text>
+        </View>
+      )}
+
+      <View style={styles.budgetSection}>
+        <Text style={styles.budgetLabel}>Set Your Budget</Text>
+        <TextInput
+          style={styles.budgetInput}
+          placeholder="Enter your budget ($)"
+          value={budget}
+          onChangeText={setBudget}
+          keyboardType="numeric"
+        />
+      </View>
 
       <TouchableOpacity
-        style={styles.addButton}
-        onPress={() => setShowAddItem(true)}
+        style={[styles.generateButton, !budget && styles.generateButtonDisabled]}
+        onPress={generateGroceryList}
+        disabled={!budget || loading}
       >
-        <Ionicons name="add-circle-outline" size={24} color="#4A90E2" />
-        <Text style={styles.addButtonText}>Add Item</Text>
+        {loading ? (
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        ) : (
+          <>
+            <Text style={styles.generateButtonText}>Generate Grocery List</Text>
+            <Ionicons name="cart-outline" size={24} color="#FFFFFF" />
+          </>
+        )}
       </TouchableOpacity>
 
-      <View style={styles.totalSection}>
-        <Text style={styles.totalLabel}>Total Estimated Cost:</Text>
-        <Text style={styles.totalAmount}>${totalCost.toFixed(2)}</Text>
-      </View>
+      {groceryList.length > 0 && (
+        <View style={styles.groceryListContainer}>
+          <Text style={styles.totalCost}>
+            Total Estimated Cost: ${totalCost.toFixed(2)}
+          </Text>
+          {Object.entries(groupItemsByCategory()).map(([category, items]) => (
+            items.length > 0 && (
+              <View key={category} style={styles.categorySection}>
+                <Text style={styles.categoryTitle}>{category}</Text>
+                {items.map((item, index) => (
+                  <View key={index} style={styles.itemRow}>
+                    <View style={styles.itemInfo}>
+                      <Text style={styles.itemName}>{item.name}</Text>
+                      <Text style={styles.itemDetails}>
+                        {item.quantity} {item.unit.split(' ')[0]}
+                        {item.note && ` • ${item.note}`}
+                      </Text>
+                    </View>
+                    <Text style={styles.itemPrice}>{item.estimatedPrice}</Text>
+                  </View>
+                ))}
+              </View>
+            )
+          ))}
+        </View>
+      )}
 
       <View style={styles.buttonContainer}>
         <TouchableOpacity
@@ -242,68 +313,6 @@ export default function GroceryListStep({
           <Text style={styles.backButtonText}>Back</Text>
         </TouchableOpacity>
       </View>
-
-      {showAddItem && (
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add New Item</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Item name"
-              value={newItem.name}
-              onChangeText={(text) => setNewItem(prev => ({ ...prev, name: text }))}
-            />
-            <View style={styles.inputRow}>
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                placeholder="Quantity"
-                value={newItem.quantity}
-                onChangeText={(text) => setNewItem(prev => ({ ...prev, quantity: text }))}
-                keyboardType="numeric"
-              />
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                placeholder="Unit"
-                value={newItem.unit}
-                onChangeText={(text) => setNewItem(prev => ({ ...prev, unit: text }))}
-              />
-            </View>
-            <TextInput
-              style={styles.input}
-              placeholder="Estimated price ($)"
-              value={newItem.estimatedPrice}
-              onChangeText={(text) => setNewItem(prev => ({ ...prev, estimatedPrice: text }))}
-              keyboardType="numeric"
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Category"
-              value={newItem.category}
-              onChangeText={(text) => setNewItem(prev => ({ ...prev, category: text }))}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Note (optional)"
-              value={newItem.note}
-              onChangeText={(text) => setNewItem(prev => ({ ...prev, note: text }))}
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setShowAddItem(false)}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton]}
-                onPress={addItem}
-              >
-                <Text style={styles.saveButtonText}>Add Item</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      )}
     </ScrollView>
   );
 }
@@ -320,23 +329,9 @@ const styles = StyleSheet.create({
     margin: 16,
     paddingHorizontal: 16,
   },
-  categorySection: {
-    marginBottom: 24,
-  },
-  categoryTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginHorizontal: 16,
-    marginBottom: 12,
-  },
-  itemCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  storeInfo: {
     backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginBottom: 8,
+    margin: 16,
     padding: 16,
     borderRadius: 12,
     shadowColor: '#000',
@@ -345,12 +340,110 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  storeLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  storeName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  storeAddress: {
+    fontSize: 14,
+    color: '#666',
+  },
+  budgetSection: {
+    backgroundColor: '#FFFFFF',
+    margin: 16,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  budgetLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  budgetInput: {
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+  },
+  generateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4A90E2',
+    margin: 16,
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  generateButtonDisabled: {
+    backgroundColor: '#CCCCCC',
+  },
+  generateButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    marginRight: 8,
+  },
+  groceryListContainer: {
+    margin: 16,
+  },
+  totalCost: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  categorySection: {
+    backgroundColor: '#FFFFFF',
+    marginBottom: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  categoryTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
+  itemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
+  },
   itemInfo: {
     flex: 1,
+    marginRight: 16,
   },
   itemName: {
     fontSize: 16,
-    fontWeight: '500',
     color: '#333',
     marginBottom: 4,
   },
@@ -358,67 +451,9 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-  itemNote: {
-    fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
-    marginTop: 4,
-  },
-  itemActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
   itemPrice: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#4A90E2',
-  },
-  removeButton: {
-    padding: 4,
-  },
-  addButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  addButtonText: {
-    color: '#4A90E2',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  totalSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  totalLabel: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  totalAmount: {
-    fontSize: 24,
-    fontWeight: '700',
     color: '#4A90E2',
   },
   buttonContainer: {
@@ -442,72 +477,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
-  },
-  modalContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    width: '90%',
-    padding: 24,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: 16,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: 16,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 12,
-    marginTop: 16,
-  },
-  modalButton: {
-    padding: 12,
-    borderRadius: 8,
-    minWidth: 100,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#F0F0F0',
-  },
-  cancelButtonText: {
-    color: '#666',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  saveButton: {
-    backgroundColor: '#4A90E2',
-  },
-  saveButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
   },
 }); 

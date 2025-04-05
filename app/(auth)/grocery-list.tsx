@@ -160,7 +160,6 @@ import GroceryListStep from '../components/meal-planner-steps/GroceryListStep';
 interface WizardState {
   currentStep: number;
   preferences: {
-    budget: string;
     cuisines: string[];
     dietaryRestrictions: string[];
     portionSize: number;
@@ -181,7 +180,6 @@ export default function GroceryListScreen() {
   const [wizardState, setWizardState] = useState<WizardState>({
     currentStep: 1,
     preferences: {
-      budget: '',
       cuisines: [],
       dietaryRestrictions: [],
       portionSize: 2,

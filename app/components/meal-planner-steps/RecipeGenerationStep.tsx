@@ -46,7 +46,6 @@ interface FridgeItem {
 
 interface RecipeGenerationStepProps {
   preferences: {
-    budget: string;
     cuisines: string[];
     dietaryRestrictions: string[];
     portionSize: number;
@@ -124,7 +123,6 @@ export default function RecipeGenerationStep({
 ${availableFridgeItems.map(item => `- ${item.name} (${remainingQuantities[item.name]} ${item.unit} available)`).join('\n')}
 
 Additional preferences:
-Budget: $${preferences.budget}
 Cuisines: ${preferences.cuisines.join(', ')}
 Dietary Restrictions: ${preferences.dietaryRestrictions.join(', ')}
 Portion Size: ${preferences.portionSize} people
@@ -228,7 +226,6 @@ Return a JSON object with this structure:
 ${fridgeItems.map(item => `- ${item.name} (${item.quantity} ${item.unit} available)`).join('\n')}
 
 Additional preferences:
-Budget: $${preferences.budget}
 Cuisines: ${preferences.cuisines.join(', ')}
 Dietary Restrictions: ${preferences.dietaryRestrictions.join(', ')}
 Portion Size: ${preferences.portionSize} people
