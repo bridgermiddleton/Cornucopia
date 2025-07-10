@@ -1,50 +1,184 @@
-# Welcome to your Expo app 👋
+🌽 Cornucopia
+Smart Grocery Planning Made Simple
+Cornucopia is a cross-platform mobile application built with React Native and Expo that revolutionizes how you manage your grocery shopping and meal planning. With intelligent features and a sleek interface, Cornucopia helps you stay organized, reduce food waste, and make grocery shopping more efficient.
+✨ Features
+🔐 User Authentication
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Secure Firebase Authentication
+Email/Password sign-up and login
+Persistent user sessions
 
-## Get started
+📍 Location Services
 
-1. Install dependencies
+GPS location tracking for finding nearby grocery stores
+Permission-based location access
+Location-aware features
 
-   ```bash
-   npm install
-   ```
+🏠 Core Functionality
 
-2. Start the app
+Smart Home Dashboard: Personalized welcome screen with quick access to all features
+Fridge Inventory Management: Track what's in your fridge and pantry
+Meal Planning: Plan your meals and generate shopping lists
+Grocery Shopping: Streamlined shopping experience with location integration
+Settings Management: Customize your app experience
 
-   ```bash
-    npx expo start
-   ```
+🎨 User Experience
 
-In the output, you'll find options to open the app in a
+Clean, modern interface with Material Design principles
+Intuitive navigation with tab-based layout
+Responsive design for both iOS and Android
+Haptic feedback and smooth animations
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+🛠 Technology Stack
+Frontend
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+React Native (0.76.7) - Cross-platform mobile development
+Expo (~52.0.36) - Development platform and tools
+Expo Router - File-based navigation system
+TypeScript - Type-safe development
 
-## Get a fresh project
+Navigation & UI
 
-When you're ready, run:
+React Navigation - Bottom tabs and native navigation
+Expo Vector Icons - Beautiful iconography
+React Native Reanimated - Smooth animations
+React Native Gesture Handler - Touch interactions
 
-```bash
-npm run reset-project
-```
+Backend & Services
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Firebase (11.3.0) - Backend as a Service
 
-## Learn more
+Authentication
+Firestore Database
+Cloud Storage
 
-To learn more about developing your project with Expo, look at the following resources:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+OpenAI (4.87.3) - AI-powered features
 
-## Join the community
+Device Integration
 
-Join our community of developers creating universal apps.
+Expo Location - GPS and location services
+React Native Permissions - Runtime permissions
+React Native Image Picker - Camera and photo library access
+Expo Haptics - Tactile feedback
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Additional Features
+
+Google Places Autocomplete - Location search and autocomplete
+React Native Date Picker - Date/time selection
+React Native WebView - In-app browser functionality
+
+🚀 Getting Started
+Prerequisites
+
+Node.js (18 or higher)
+npm or yarn
+Expo CLI
+iOS Simulator (for iOS development)
+Android Studio/Emulator (for Android development)
+
+Installation
+
+Clone the repository
+bashgit clone <your-repo-url>
+cd cornucopia
+
+Install dependencies
+bashnpm install
+
+Set up Firebase
+
+Create a Firebase project at Firebase Console
+Enable Authentication, Firestore, and Storage
+Download configuration files:
+
+GoogleService-Info.plist for iOS (place in ios/Cornucopia/)
+google-services.json for Android (place in android/app/)
+
+
+
+
+Start the development server
+bashnpm start
+# or
+npx expo start
+
+Run on device/simulator
+
+Press i for iOS Simulator
+Press a for Android Emulator
+Scan QR code with Expo Go app for physical device testing
+
+
+
+Building for Production
+iOS
+bashnpm run ios
+Android
+bashnpm run android
+📱 App Structure
+app/
+├── (auth)/                 # Protected routes
+│   ├── home.tsx           # Main dashboard
+│   └── _layout.tsx        # Auth layout
+├── _layout.tsx            # Root layout with auth logic
+└── index.tsx              # Login/signup screen
+🔧 Configuration
+Environment Setup
+The app uses Firebase for backend services. Ensure you have:
+
+Firebase project configured
+Authentication providers enabled
+Firestore security rules set up
+Storage bucket configured
+
+Permissions
+The app requests the following permissions:
+
+Location - For finding nearby stores
+Camera - For taking photos of receipts/items
+Storage - For saving images and data
+
+🧪 Testing
+Run the test suite:
+bashnpm test
+For continuous testing:
+bashnpm run test -- --watchAll
+📋 Available Scripts
+
+npm start - Start Expo development server
+npm run android - Run on Android
+npm run ios - Run on iOS
+npm run web - Run in web browser
+npm test - Run tests
+npm run lint - Lint code
+npm run reset-project - Reset to blank project
+
+🤝 Contributing
+
+Fork the repository
+Create a feature branch (git checkout -b feature/amazing-feature)
+Commit your changes (git commit -m 'Add some amazing feature')
+Push to the branch (git push origin feature/amazing-feature)
+Open a Pull Request
+
+📄 License
+This project is private and proprietary.
+🆘 Support
+For support and questions:
+
+Check the Expo Documentation
+Review React Native Documentation
+Contact the development team
+
+🗺 Roadmap
+
+ AI-powered meal suggestions
+ Barcode scanning for inventory
+ Social sharing of recipes
+ Advanced analytics and insights
+ Integration with grocery store APIs
+ Voice commands and accessibility improvements
+
+
+Made with ❤️ using React Native and Expo
