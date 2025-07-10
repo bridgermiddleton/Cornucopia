@@ -41,3 +41,4 @@ google-services.json
 GoogleService-Info.plist
 # API Keys
 app/config/keys.ts
+.env
